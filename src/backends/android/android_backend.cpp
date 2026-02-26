@@ -1,0 +1,368 @@
+/*
+    KWin - the KDE window manager
+    This file is part of the KDE project.
+
+    SPDX-FileCopyrightText: 2024 Termux Community
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
+
+#include "android_backend.h"
+#include "android_egl_backend.h"
+#include "android_output.h"
+#include "core/session.h"
+#include "input.h"
+
+#include <QSocketNotifier>
+#include <linux/input-event-codes.h>
+
+// termux-wayland library headers
+#include "termux_display_api.h"
+
+namespace KWin
+{
+namespace Android
+{
+
+// Android to Linux keycode conversion table
+static const int android_to_linux_keycode[304] = {
+    [4] = KEY_ESC,
+    [7] = KEY_0, [8] = KEY_1, [9] = KEY_2, [10] = KEY_3, [11] = KEY_4,
+    [12] = KEY_5, [13] = KEY_6, [14] = KEY_7, [15] = KEY_8, [16] = KEY_9,
+    [19] = KEY_UP, [20] = KEY_DOWN, [21] = KEY_LEFT, [22] = KEY_RIGHT,
+    [23] = KEY_ENTER,
+    [29] = KEY_A, [30] = KEY_B, [31] = KEY_C, [32] = KEY_D, [33] = KEY_E,
+    [34] = KEY_F, [35] = KEY_G, [36] = KEY_H, [37] = KEY_I, [38] = KEY_J,
+    [39] = KEY_K, [40] = KEY_L, [41] = KEY_M, [42] = KEY_N, [43] = KEY_O,
+    [44] = KEY_P, [45] = KEY_Q, [46] = KEY_R, [47] = KEY_S, [48] = KEY_T,
+    [49] = KEY_U, [50] = KEY_V, [51] = KEY_W, [52] = KEY_X, [53] = KEY_Y,
+    [54] = KEY_Z,
+    [57] = KEY_LEFTALT, [58] = KEY_RIGHTALT,
+    [59] = KEY_LEFTSHIFT, [60] = KEY_RIGHTSHIFT,
+    [61] = KEY_TAB, [62] = KEY_SPACE,
+    [66] = KEY_ENTER, [67] = KEY_BACKSPACE,
+    [111] = KEY_ESC, [112] = KEY_DELETE,
+    [113] = KEY_LEFTCTRL, [114] = KEY_RIGHTCTRL,
+    [115] = KEY_CAPSLOCK, [117] = KEY_LEFTMETA, [118] = KEY_RIGHTMETA,
+    [122] = KEY_HOME, [123] = KEY_END, [124] = KEY_INSERT,
+    [131] = KEY_F1, [132] = KEY_F2, [133] = KEY_F3, [134] = KEY_F4,
+    [135] = KEY_F5, [136] = KEY_F6, [137] = KEY_F7, [138] = KEY_F8,
+    [139] = KEY_F9, [140] = KEY_F10, [141] = KEY_F11, [142] = KEY_F12,
+};
+
+AndroidBackend::AndroidBackend(QObject *parent)
+    : OutputBackend(parent)
+{
+}
+
+AndroidBackend::~AndroidBackend()
+{
+    if (m_inputNotifier) {
+        delete m_inputNotifier;
+    }
+    
+    if (m_touchDevice) {
+        delete m_touchDevice;
+    }
+    if (m_keyboardDevice) {
+        delete m_keyboardDevice;
+    }
+    if (m_pointerDevice) {
+        delete m_pointerDevice;
+    }
+    
+    if (m_output) {
+        Q_EMIT outputRemoved(m_output);
+        delete m_output;
+    }
+    
+    if (m_socketFd >= 0) {
+        close(m_socketFd);
+    }
+    if (m_connFd >= 0) {
+        close(m_connFd);
+    }
+}
+
+bool AndroidBackend::initialize()
+{
+    qInfo() << "Initializing Android Backend";
+    
+    // Connect to termux-app display server
+    if (!connectToDisplayServer()) {
+        qCritical() << "Failed to connect to display server";
+        return false;
+    }
+    
+    // Create output
+    createOutput();
+    
+    // Initialize input devices
+    m_touchDevice = new AndroidInputDevice(AndroidInputDevice::Type::Touch, this);
+    m_keyboardDevice = new AndroidInputDevice(AndroidInputDevice::Type::Keyboard, this);
+    m_pointerDevice = new AndroidInputDevice(AndroidInputDevice::Type::Pointer, this);
+    
+    // Setup input event listener
+    if (m_connFd >= 0) {
+        m_inputNotifier = new QSocketNotifier(m_connFd, QSocketNotifier::Read, this);
+        connect(m_inputNotifier, &QSocketNotifier::activated, this, &AndroidBackend::handleInputEvents);
+    }
+    
+    qInfo() << "Android Backend initialized successfully";
+    return true;
+}
+
+bool AndroidBackend::connectToDisplayServer()
+{
+    qDebug() << "Connecting to termux display server...";
+    
+    // Set screen configuration
+    setScreenConfig(m_width, m_height, m_refreshRate);
+    
+    // Connect using termux-wayland library
+    if (connectToRender() != 0) {
+        qCritical() << "connectToRender() failed";
+        return false;
+    }
+    
+    // Get shared resources from termux-wayland library
+    m_lorieBuffer = get_lorieBuffer();
+    m_serverState = get_serverState();
+    m_connFd = get_conn_fd();
+    
+    if (!m_lorieBuffer) {
+        qCritical() << "Failed to get LorieBuffer";
+        return false;
+    }
+    
+    if (!m_serverState) {
+        qCritical() << "Failed to get server state";
+        return false;
+    }
+    
+    const LorieBuffer_Desc *desc = LorieBuffer_description(m_lorieBuffer);
+    m_width = desc->width;
+    m_height = desc->height;
+    
+    qInfo() << "Connected to display server";
+    qInfo() << "Buffer size:" << m_width << "x" << m_height;
+    
+    return true;
+}
+
+void AndroidBackend::createOutput()
+{
+    m_output = new AndroidOutput(this);
+    Q_EMIT outputAdded(m_output);
+}
+
+std::unique_ptr<InputBackend> AndroidBackend::createInputBackend()
+{
+    return std::make_unique<AndroidInputBackend>(this);
+}
+
+std::unique_ptr<EglBackend> AndroidBackend::createOpenGLBackend()
+{
+    return std::make_unique<AndroidEglBackend>(this);
+}
+
+std::unique_ptr<QPainterBackend> AndroidBackend::createQPainterBackend()
+{
+    // QPainter backend not implemented for Android
+    return nullptr;
+}
+
+EglDisplay *AndroidBackend::sceneEglDisplayObject() const
+{
+    // Will be set by AndroidEglBackend
+    return nullptr;
+}
+
+QList<CompositingType> AndroidBackend::supportedCompositors() const
+{
+    return {OpenGLCompositing};
+}
+
+QList<BackendOutput *> AndroidBackend::outputs() const
+{
+    if (m_output) {
+        return {m_output};
+    }
+    return {};
+}
+
+QString AndroidBackend::supportInformation() const
+{
+    QString support = QStringLiteral("Name: Android\n");
+    support.append(QStringLiteral("Output: %1x%2@%3Hz\n").arg(m_width).arg(m_height).arg(m_refreshRate));
+    support.append(QStringLiteral("Buffer: AHardwareBuffer\n"));
+    return support;
+}
+
+void AndroidBackend::handleInputEvents()
+{
+    lorieEvent e;
+    while (read(m_connFd, &e, sizeof(e)) == sizeof(e)) {
+        processInputEvent(e);
+    }
+}
+
+void AndroidBackend::processInputEvent(const lorieEvent &e)
+{
+    switch (e.type) {
+    case EVENT_TOUCH: {
+        if (!m_touchDevice) break;
+        
+        const auto &touch = e.touch;
+        const QPointF pos(touch.x, touch.y);
+        
+        switch (touch.type) {
+        case 0: // Down
+            Q_EMIT m_touchDevice->touchDown(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+            break;
+        case 1: // Up
+            Q_EMIT m_touchDevice->touchUp(touch.id, std::chrono::milliseconds(0), m_touchDevice);
+            break;
+        case 2: // Motion
+            Q_EMIT m_touchDevice->touchMotion(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+            break;
+        }
+        Q_EMIT m_touchDevice->touchFrame(m_touchDevice);
+        break;
+    }
+    
+    case EVENT_MOUSE: {
+        if (!m_pointerDevice) break;
+        
+        const auto &mouse = e.mouse;
+        const QPointF pos(mouse.x, mouse.y);
+        
+        if (mouse.relative) {
+            Q_EMIT m_pointerDevice->pointerMotion(QPointF(mouse.x, mouse.y), std::chrono::milliseconds(0), m_pointerDevice);
+        } else {
+            Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, std::chrono::milliseconds(0), m_pointerDevice);
+        }
+        
+        if (mouse.detail > 0) {
+            PointerButtonState state = mouse.down ? PointerButtonState::Pressed : PointerButtonState::Released;
+            Q_EMIT m_pointerDevice->pointerButtonChanged(mouse.detail, state, std::chrono::milliseconds(0), m_pointerDevice);
+        }
+        
+        Q_EMIT m_pointerDevice->pointerFrame(m_pointerDevice);
+        break;
+    }
+    
+    case EVENT_KEY: {
+        if (!m_keyboardDevice) break;
+        
+        const auto &key = e.key;
+        int linuxKeycode = key.key;
+        
+        // Convert Android keycode to Linux keycode if needed
+        if (key.key < 304 && android_to_linux_keycode[key.key] != 0) {
+            linuxKeycode = android_to_linux_keycode[key.key];
+        }
+        
+        KeyboardKeyState state = key.state ? KeyboardKeyState::Pressed : KeyboardKeyState::Released;
+        Q_EMIT m_keyboardDevice->keyChanged(linuxKeycode, state, std::chrono::milliseconds(0), m_keyboardDevice);
+        break;
+    }
+    
+    default:
+        break;
+    }
+}
+
+// AndroidInputBackend implementation
+AndroidInputBackend::AndroidInputBackend(AndroidBackend *backend)
+    : m_backend(backend)
+{
+}
+
+AndroidInputBackend::~AndroidInputBackend()
+{
+}
+
+void AndroidInputBackend::initialize()
+{
+    // Input devices are created by AndroidBackend
+    Q_EMIT deviceAdded(m_backend->m_touchDevice);
+    Q_EMIT deviceAdded(m_backend->m_keyboardDevice);
+    Q_EMIT deviceAdded(m_backend->m_pointerDevice);
+}
+
+// AndroidInputDevice implementation
+AndroidInputDevice::AndroidInputDevice(Type type, AndroidBackend *backend)
+    : m_type(type)
+    , m_backend(backend)
+{
+}
+
+AndroidInputDevice::~AndroidInputDevice()
+{
+}
+
+QString AndroidInputDevice::name() const
+{
+    switch (m_type) {
+    case Type::Keyboard:
+        return QStringLiteral("Android Virtual Keyboard");
+    case Type::Pointer:
+        return QStringLiteral("Android Virtual Pointer");
+    case Type::Touch:
+        return QStringLiteral("Android Virtual Touchscreen");
+    }
+    return QStringLiteral("Android Virtual Input");
+}
+
+bool AndroidInputDevice::isEnabled() const
+{
+    return m_enabled;
+}
+
+void AndroidInputDevice::setEnabled(bool enabled)
+{
+    m_enabled = enabled;
+}
+
+bool AndroidInputDevice::isKeyboard() const
+{
+    return m_type == Type::Keyboard;
+}
+
+bool AndroidInputDevice::isPointer() const
+{
+    return m_type == Type::Pointer;
+}
+
+bool AndroidInputDevice::isTouchpad() const
+{
+    return false;
+}
+
+bool AndroidInputDevice::isTouch() const
+{
+    return m_type == Type::Touch;
+}
+
+bool AndroidInputDevice::isTabletTool() const
+{
+    return false;
+}
+
+bool AndroidInputDevice::isTabletPad() const
+{
+    return false;
+}
+
+bool AndroidInputDevice::isTabletModeSwitch() const
+{
+    return false;
+}
+
+bool AndroidInputDevice::isLidSwitch() const
+{
+    return false;
+}
+
+} // namespace Android
+} // namespace KWin

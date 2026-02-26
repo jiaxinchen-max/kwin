@@ -1,3 +1,4 @@
+add_subdirectory(android)
 add_subdirectory(drm)
 add_subdirectory(fakeinput)
 add_subdirectory(libinput)
