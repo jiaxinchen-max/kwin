@@ -96,6 +96,20 @@ Q_SIGNALS:
 
 Connection *Connection::create(Session *session)
 {
+#ifdef __ANDROID__
+    // For Termux, create a dummy udev since we don't use it
+    std::unique_ptr<Udev> udev = std::make_unique<Udev>();
+    std::unique_ptr<Context> context = std::make_unique<Context>(session, std::move(udev));
+    if (!context->isValid()) {
+        qCWarning(KWIN_LIBINPUT) << "Failed to create termux context";
+        return nullptr;
+    }
+    if (!context->initialize()) {
+        qCWarning(KWIN_LIBINPUT) << "Failed to initialize termux context";
+        return nullptr;
+    }
+    return new Connection(std::move(context));
+#else
     std::unique_ptr<Udev> udev = std::make_unique<Udev>();
     if (!udev->isValid()) {
         qCWarning(KWIN_LIBINPUT) << "Failed to initialize udev";
@@ -111,6 +125,7 @@ Connection *Connection::create(Session *session)
         return nullptr;
     }
     return new Connection(std::move(context));
+#endif
 }
 
 Connection::Connection(std::unique_ptr<Context> &&input)

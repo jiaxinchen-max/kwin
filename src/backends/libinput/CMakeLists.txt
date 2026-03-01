@@ -23,3 +23,9 @@ target_sources(kwin PRIVATE
     libinputbackend.cpp
 )
 target_link_libraries(kwin PRIVATE Libinput::Libinput)
+
+# Add Termux support for Android
+if(ANDROID)
+    find_library(TERMUX_DISPLAY_CLIENT termux-display-client REQUIRED)
+    target_link_libraries(kwin PRIVATE ${TERMUX_DISPLAY_CLIENT})
+endif()

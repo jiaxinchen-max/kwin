@@ -13,6 +13,10 @@
 #include "core/session.h"
 #include "utils/udev.h"
 
+#ifdef __ANDROID__
+#include <render.h>  // from termux-display-client
+#endif
+
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -45,12 +49,26 @@ static void libinputLogHandler(libinput *libinput, libinput_log_priority priorit
 
 Context::Context(Session *session, std::unique_ptr<Udev> &&udev)
     : m_session(session)
+#ifdef __ANDROID__
+    , m_libinput(nullptr)
+    , m_termux_fd(-1)
+#else
     , m_libinput(libinput_udev_create_context(&Context::s_interface, this, *udev.get()))
+#endif
     , m_suspended(false)
     , m_udev(std::move(udev))
 {
-    libinput_log_set_priority(m_libinput, LIBINPUT_LOG_PRIORITY_DEBUG);
-    libinput_log_set_handler(m_libinput, &libinputLogHandler);
+#ifdef __ANDROID__
+    // Get termux-display-client event fd
+    m_termux_fd = get_conn_fd();
+    if (m_termux_fd >= 0) {
+        m_libinput = libinput_termux_create_context(&Context::s_interface, this, m_termux_fd);
+    }
+#endif
+    if (m_libinput) {
+        libinput_log_set_priority(m_libinput, LIBINPUT_LOG_PRIORITY_DEBUG);
+        libinput_log_set_handler(m_libinput, &libinputLogHandler);
+    }
 }
 
 Context::~Context()
@@ -65,7 +83,12 @@ bool Context::initialize()
     if (!isValid()) {
         return false;
     }
+#ifdef __ANDROID__
+    // For Termux, we don't need to assign seat
+    return true;
+#else
     return libinput_udev_assign_seat(m_libinput, m_session->seat().toUtf8().constData()) == 0;
+#endif
 }
 
 Session *Context::session() const

@@ -70,6 +70,9 @@ private:
 
     Session *m_session;
     struct libinput *m_libinput;
+#ifdef __ANDROID__
+    int m_termux_fd;
+#endif
     bool m_suspended;
     std::unique_ptr<Udev> m_udev;
     std::vector<FileDescriptor> m_nonRestrictedFds;
