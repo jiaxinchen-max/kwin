@@ -14,7 +14,7 @@
 #include "utils/udev.h"
 
 #ifdef __ANDROID__
-#include <render.h>  // from termux-display-client
+#include <termux/render/render.h>  // from termux-display-client
 #endif
 
 #include <fcntl.h>
