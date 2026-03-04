@@ -59,9 +59,10 @@ Context::Context(Session *session, std::unique_ptr<Udev> &&udev)
     , m_udev(std::move(udev))
 {
 #ifdef __ANDROID__
-    // Get termux-display-client event fd
+    // Get termux-display-client event fd (real input events)
     m_termux_fd = get_conn_fd();
     if (m_termux_fd >= 0) {
+        // Create mock libinput context (just for API compatibility)
         m_libinput = libinput_termux_create_context(&Context::s_interface, this, m_termux_fd);
     }
 #endif
