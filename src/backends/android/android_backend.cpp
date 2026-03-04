@@ -238,9 +238,10 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         const QPointF pos(mouse.x, mouse.y);
         
         if (mouse.relative) {
-            Q_EMIT m_pointerDevice->pointerMotion(QPointF(mouse.x, mouse.y), std::chrono::milliseconds(0), m_pointerDevice);
+            QPointF delta(mouse.x, mouse.y);
+            Q_EMIT m_pointerDevice->pointerMotion(delta, delta, std::chrono::microseconds(0), m_pointerDevice);
         } else {
-            Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, std::chrono::milliseconds(0), m_pointerDevice);
+            Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, std::chrono::microseconds(0), m_pointerDevice);
         }
         
         if (mouse.detail > 0) {
@@ -286,9 +287,9 @@ AndroidInputBackend::~AndroidInputBackend()
 void AndroidInputBackend::initialize()
 {
     // Input devices are created by AndroidBackend
-    Q_EMIT deviceAdded(m_backend->m_touchDevice);
-    Q_EMIT deviceAdded(m_backend->m_keyboardDevice);
-    Q_EMIT deviceAdded(m_backend->m_pointerDevice);
+    Q_EMIT deviceAdded(m_backend->touchDevice());
+    Q_EMIT deviceAdded(m_backend->keyboardDevice());
+    Q_EMIT deviceAdded(m_backend->pointerDevice());
 }
 
 // AndroidInputDevice implementation

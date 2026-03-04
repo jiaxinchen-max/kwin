@@ -56,6 +56,11 @@ public:
     lorie_shared_server_state *serverState() const { return m_serverState; }
     int connectionFd() const { return m_connFd; }
     
+    // Input device accessors
+    AndroidInputDevice *touchDevice() const { return m_touchDevice; }
+    AndroidInputDevice *keyboardDevice() const { return m_keyboardDevice; }
+    AndroidInputDevice *pointerDevice() const { return m_pointerDevice; }
+    
     QString supportInformation() const override;
 
 private Q_SLOTS:
