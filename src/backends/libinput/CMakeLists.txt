@@ -25,7 +25,6 @@ target_sources(kwin PRIVATE
 target_link_libraries(kwin PRIVATE Libinput::Libinput)
 
 # Add Termux support for Android
-# Check if we're building for Android/Termux environment
 find_library(TERMUX_RENDER_LIB NAMES termux-render)
 
 if(TERMUX_RENDER_LIB)

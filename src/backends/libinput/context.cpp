@@ -15,6 +15,8 @@
 
 #ifdef __ANDROID__
 #include <termux/render/render.h>  // from termux-display-client
+// Explicit declaration to ensure symbol is found
+extern "C" int get_conn_fd(void);
 #endif
 
 #include <fcntl.h>
