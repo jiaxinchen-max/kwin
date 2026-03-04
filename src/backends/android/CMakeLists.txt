@@ -16,7 +16,10 @@ target_link_libraries(KWinAndroidBackend
     epoxy::epoxy
 )
 
-# Note: termux-render is linked by kwin main program, available via transitive dependency
+# Link termux-render library
+# Note: Both kwin and AndroidBackend link termux-render, but this should be safe
+# as they will share the same library instance in the process
+target_link_libraries(KWinAndroidBackend termux-render)
 
 install(TARGETS KWinAndroidBackend
     LIBRARY DESTINATION ${KDE_INSTALL_PLUGINDIR}/org.kde.kwin.backends

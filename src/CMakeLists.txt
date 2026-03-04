@@ -260,15 +260,6 @@ target_link_libraries(kwin
         PkgConfig::libdisplayinfo
 )
 
-# Add termux-render support for Android/Termux
-find_library(TERMUX_RENDER_LIB NAMES termux-render)
-if(TERMUX_RENDER_LIB)
-    message(STATUS "Adding termux-render library: ${TERMUX_RENDER_LIB}")
-    target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
-else()
-    # Try linking by name in case find_library fails
-    target_link_libraries(kwin PRIVATE termux-render)
-endif()
 
 if (TARGET K::KGlobalAccelD)
     target_link_libraries(kwin PRIVATE K::KGlobalAccelD)

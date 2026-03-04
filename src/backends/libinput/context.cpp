@@ -13,9 +13,8 @@
 #include "core/session.h"
 #include "utils/udev.h"
 
-#ifdef __ANDROID__
+// Always include for Termux builds (don't rely on __ANDROID__ macro)
 #include <termux/render/render.h>  // from termux-display-client
-#endif
 
 #include <fcntl.h>
 #include <unistd.h>
