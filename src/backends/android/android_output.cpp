@@ -18,18 +18,19 @@ namespace Android
 {
 
 AndroidOutput::AndroidOutput(AndroidBackend *backend)
-    : m_backend(backend)
-    , m_renderLoop(std::make_unique<RenderLoop>())
+    : BackendOutput()
+    , m_backend(backend)
+    , m_renderLoop(std::make_unique<RenderLoop>(this))
 {
     setInformation(Information{
         .name = QStringLiteral("AndroidScreen-0"),
         .manufacturer = QStringLiteral("Termux"),
         .model = QStringLiteral("Android Display"),
         .serialNumber = QStringLiteral("0"),
+        .eisaId = QStringLiteral(""),
     });
     
     updateMode();
-    setEnabled(true);
 }
 
 AndroidOutput::~AndroidOutput()
@@ -47,8 +48,10 @@ void AndroidOutput::updateMode()
     );
     
     setState(State{
+        .position = QPoint(0, 0),
         .modes = {mode},
         .currentMode = mode,
+        .enabled = true,
     });
 }
 
@@ -83,7 +86,9 @@ bool AndroidOutput::testPresentation(const std::shared_ptr<OutputFrame> &frame)
 
 void AndroidOutput::updateEnabled(bool enabled)
 {
-    setEnabled(enabled);
+    State state = m_state;
+    state.enabled = enabled;
+    setState(state);
 }
 
 } // namespace Android
