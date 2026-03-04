@@ -24,12 +24,4 @@ target_sources(kwin PRIVATE
 )
 target_link_libraries(kwin PRIVATE Libinput::Libinput)
 
-# Add Termux support for Android
-find_library(TERMUX_RENDER_LIB NAMES termux-render)
-
-if(TERMUX_RENDER_LIB)
-    message(STATUS "Found termux-render library: ${TERMUX_RENDER_LIB}")
-    target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
-else()
-    message(STATUS "termux-render library not found, skipping Termux support")
-endif()
+# Note: termux-render linking is handled in main CMakeLists.txt for kwin target

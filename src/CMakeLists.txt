@@ -260,6 +260,13 @@ target_link_libraries(kwin
         PkgConfig::libdisplayinfo
 )
 
+# Link termux-render for Termux/Android support
+find_library(TERMUX_RENDER_LIB NAMES termux-render)
+if(TERMUX_RENDER_LIB)
+    message(STATUS "Found termux-render library for kwin: ${TERMUX_RENDER_LIB}")
+    target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
+endif()
+
 if (TARGET K::KGlobalAccelD)
     target_link_libraries(kwin PRIVATE K::KGlobalAccelD)
 endif()
