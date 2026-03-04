@@ -22,9 +22,6 @@ target_sources(kwin PRIVATE
     libinput_logging.cpp
     libinputbackend.cpp
 )
-# Add Termux support - libinput backend needs termux-render for get_conn_fd()
-find_library(TERMUX_RENDER_LIB NAMES termux-render REQUIRED)
-message(STATUS "Found termux-render library for libinput: ${TERMUX_RENDER_LIB}")
-target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
+# Note: termux-render is linked by Android backend which is now compiled into kwin
 
 target_link_libraries(kwin PRIVATE Libinput::Libinput)
