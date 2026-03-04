@@ -22,6 +22,8 @@ target_sources(kwin PRIVATE
     libinput_logging.cpp
     libinputbackend.cpp
 )
-# Note: termux-render is linked by Android backend which is now compiled into kwin
+# Link termux-render for get_conn_fd() function used in context.cpp
+find_library(TERMUX_RENDER_LIB NAMES termux-render REQUIRED)
+target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
 
 target_link_libraries(kwin PRIVATE Libinput::Libinput)
