@@ -16,11 +16,6 @@
 // Always include for Termux builds (don't rely on __ANDROID__ macro)
 #include <termux/render/render.h>  // from termux-display-client
 
-// Explicit C linkage declaration to ensure proper symbol resolution
-extern "C" {
-    int get_conn_fd(void);
-}
-
 #include <fcntl.h>
 #include <unistd.h>
 
