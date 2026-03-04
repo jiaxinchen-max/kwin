@@ -25,8 +25,7 @@ extern "C" {
 
 // Forward declarations from termux-display-client
 struct AHardwareBuffer;
-struct lorie_shared_server_state;
-union lorieEvent;
+// Note: lorie_shared_server_state and lorieEvent are defined in termux-render headers
 
 // All types are defined in termux-render library headers
 // This file only provides C++ convenience wrappers
