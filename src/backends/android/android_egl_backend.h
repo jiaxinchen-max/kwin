@@ -9,7 +9,7 @@
 #pragma once
 
 #include "opengl/eglbackend.h"
-#include "scene/outputlayer.h"
+#include "core/outputlayer.h"
 
 #include <epoxy/egl.h>
 #include <epoxy/gl.h>
