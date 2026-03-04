@@ -9,12 +9,14 @@
 #pragma once
 
 #include "core/backendoutput.h"
+#include <memory>
 
 namespace KWin
 {
 
 class OutputLayer;
 class OutputFrame;
+class RenderLoop;
 
 namespace Android
 {
@@ -32,6 +34,8 @@ public:
     explicit AndroidOutput(AndroidBackend *backend);
     ~AndroidOutput() override;
 
+    RenderLoop *renderLoop() const override;
+    bool testPresentation(const std::shared_ptr<OutputFrame> &frame) override;
     bool present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame) override;
     void updateEnabled(bool enabled);
 
@@ -39,6 +43,7 @@ private:
     void updateMode();
     
     AndroidBackend *m_backend;
+    std::unique_ptr<RenderLoop> m_renderLoop;
 };
 
 } // namespace Android

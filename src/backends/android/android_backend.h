@@ -13,11 +13,10 @@
 #include "core/inputdevice.h"
 #include <QObject>
 #include <QSocketNotifier>
+#include "termux_display_api.h"
 
 // Forward declarations for termux-wayland library
 struct LorieBuffer;
-struct lorie_shared_server_state;
-typedef union lorieEvent lorieEvent;
 
 namespace KWin
 {

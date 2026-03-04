@@ -14,6 +14,7 @@
 
 #include <QSocketNotifier>
 #include <linux/input-event-codes.h>
+#include <unistd.h>
 
 // termux-wayland library headers
 #include "termux_display_api.h"
@@ -212,7 +213,7 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
     case EVENT_TOUCH: {
         if (!m_touchDevice) break;
         
-        const auto &touch = e.touch;
+        const auto &touch = e.touchEvent.touch;
         const QPointF pos(touch.x, touch.y);
         
         switch (touch.type) {
@@ -233,7 +234,7 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
     case EVENT_MOUSE: {
         if (!m_pointerDevice) break;
         
-        const auto &mouse = e.mouse;
+        const auto &mouse = e.mouseEvent.mouse;
         const QPointF pos(mouse.x, mouse.y);
         
         if (mouse.relative) {
@@ -254,7 +255,7 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
     case EVENT_KEY: {
         if (!m_keyboardDevice) break;
         
-        const auto &key = e.key;
+        const auto &key = e.keyEvent.key;
         int linuxKeycode = key.key;
         
         // Convert Android keycode to Linux keycode if needed

@@ -119,21 +119,21 @@ typedef struct {
 typedef union {
     uint8_t type;
     struct {
-        uint8_t type;
+        uint8_t eventType;
         TouchEvent touch;
-    };
+    } touchEvent;
     struct {
-        uint8_t type;
+        uint8_t eventType;
         MouseEvent mouse;
-    };
+    } mouseEvent;
     struct {
-        uint8_t type;
+        uint8_t eventType;
         KeyEvent key;
-    };
+    } keyEvent;
     struct {
-        uint8_t type;
+        uint8_t eventType;
         ScreenConfig screenSize;
-    };
+    } screenEvent;
 } lorieEvent;
 
 // API functions from termux-display-client

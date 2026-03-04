@@ -11,6 +11,7 @@
 #include "termux_display_api.h"
 #include "core/outputframe.h"
 #include "core/outputlayer.h"
+#include "core/renderloop.h"
 
 namespace KWin
 {
@@ -19,6 +20,7 @@ namespace Android
 
 AndroidOutput::AndroidOutput(AndroidBackend *backend)
     : m_backend(backend)
+    , m_renderLoop(std::make_unique<RenderLoop>())
 {
     setInformation(Information{
         .name = QStringLiteral("AndroidScreen-0"),
@@ -66,6 +68,18 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
         return true;
     }
     return false;
+}
+
+RenderLoop *AndroidOutput::renderLoop() const
+{
+    return m_renderLoop.get();
+}
+
+bool AndroidOutput::testPresentation(const std::shared_ptr<OutputFrame> &frame)
+{
+    Q_UNUSED(frame)
+    // For Android, we always accept presentation
+    return true;
 }
 
 void AndroidOutput::updateEnabled(bool enabled)
