@@ -28,8 +28,8 @@ public:
     explicit AndroidOutput(AndroidBackend *backend);
     ~AndroidOutput() override;
 
-    void present() override;
-    void updateEnabled(bool enabled) override;
+    bool present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame) override;
+    void updateEnabled(bool enabled);
 
 private:
     void updateMode();

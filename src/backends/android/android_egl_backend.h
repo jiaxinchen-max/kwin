@@ -27,6 +27,7 @@ namespace Android
 
 class AndroidBackend;
 class AndroidOutput;
+class AndroidEglBackend;
 
 /**
  * @brief OpenGL rendering layer for Android

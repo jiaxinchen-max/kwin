@@ -49,8 +49,11 @@ void AndroidOutput::updateMode()
     });
 }
 
-void AndroidOutput::present()
+bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
 {
+    Q_UNUSED(layersToUpdate)
+    Q_UNUSED(frame)
+    
     // Signal the termux-app display server that a new frame is ready
     lorie_shared_server_state *state = m_backend->serverState();
     if (state) {
@@ -58,7 +61,9 @@ void AndroidOutput::present()
         state->drawRequested = 1;
         pthread_cond_signal(&state->cond);
         lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        return true;
     }
+    return false;
 }
 
 void AndroidOutput::updateEnabled(bool enabled)
