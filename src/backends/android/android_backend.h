@@ -15,6 +15,10 @@
 #include <QSocketNotifier>
 #include "termux_display_api.h"
 
+// Include termux-render headers for complete type definitions
+#include <termux/render/render.h>
+#include <termux/render/buffer.h>
+
 // Forward declarations for termux-wayland library
 struct LorieBuffer;
 
