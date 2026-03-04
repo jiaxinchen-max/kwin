@@ -27,7 +27,7 @@ namespace Android
 // AndroidEglLayer implementation
 
 AndroidEglLayer::AndroidEglLayer(AndroidOutput *output, AndroidEglBackend *backend)
-    : OutputLayer(output, OutputLayerType::PrimaryOnly, 0, 0, 0)
+    : OutputLayer(output, OutputLayerType::Primary, 0, 0, 0)
     , m_backend(backend)
     , m_output(output)
 {
@@ -219,6 +219,12 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     }
     
     return true;
+}
+
+void AndroidEglLayer::releaseBuffers()
+{
+    // Clean up any allocated resources
+    cleanup();
 }
 
 DrmDevice *AndroidEglLayer::scanoutDevice() const
