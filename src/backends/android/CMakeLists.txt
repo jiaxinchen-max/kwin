@@ -16,30 +16,16 @@ target_link_libraries(KWinAndroidBackend
     epoxy::epoxy
 )
 
-# Link termux-wayland library
-# Adjust the path to match your termux-wayland installation
-find_library(TERMUX_WAYLAND_LIB
-    NAMES termux-wayland wayland
-    PATHS
-        /data/data/com.termux/files/usr/lib
-        ${CMAKE_PREFIX_PATH}/lib
-)
+# Link termux-render library
+find_library(TERMUX_RENDER_LIB NAMES termux-render)
 
-if(TERMUX_WAYLAND_LIB)
-    message(STATUS "Found termux-wayland library: ${TERMUX_WAYLAND_LIB}")
-    target_link_libraries(KWinAndroidBackend ${TERMUX_WAYLAND_LIB})
+if(TERMUX_RENDER_LIB)
+    message(STATUS "Found termux-render library: ${TERMUX_RENDER_LIB}")
+    target_link_libraries(KWinAndroidBackend ${TERMUX_RENDER_LIB})
 else()
-    message(WARNING "termux-wayland library not found, assuming it will be available at runtime")
-    # Add library name for linking even if not found during configure
-    target_link_libraries(KWinAndroidBackend wayland)
+    message(WARNING "termux-render library not found, assuming it will be available at runtime")
+    target_link_libraries(KWinAndroidBackend termux-render)
 endif()
-
-# Include directories for termux-wayland headers
-# Adjust the path to match your termux-wayland installation
-target_include_directories(KWinAndroidBackend PRIVATE
-    /data/data/com.termux/files/usr/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../termux-display-client/include
-)
 
 install(TARGETS KWinAndroidBackend
     LIBRARY DESTINATION ${KDE_INSTALL_PLUGINDIR}/org.kde.kwin.backends
