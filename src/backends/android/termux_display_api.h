@@ -136,42 +136,8 @@ typedef union {
     } screenEvent;
 } lorieEvent;
 
-// API functions from termux-display-client
-
-/**
- * Set screen configuration
- * Must be called before connectToRender()
- */
-void setScreenConfig(int width, int height, int refreshRate);
-
-/**
- * Connect to the display server
- * @return 0 on success, -1 on failure
- */
-int connectToRender();
-
-/**
- * Get the LorieBuffer handle
- * Valid after successful connectToRender()
- */
-LorieBuffer* get_lorieBuffer();
-
-/**
- * Get the shared server state
- * Valid after successful connectToRender()
- */
-lorie_shared_server_state* get_serverState();
-
-/**
- * Get the connection file descriptor
- * Used for reading input events
- */
-int get_conn_fd();
-
-/**
- * Get buffer description
- */
-const LorieBuffer_Desc* LorieBuffer_description(LorieBuffer* buffer);
+// All API functions are declared in termux-render library headers
+// No need to redeclare them here
 
 // Mutex helpers for cross-process synchronization
 

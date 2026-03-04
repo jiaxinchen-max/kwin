@@ -18,6 +18,7 @@
 
 // termux-wayland library headers
 #include "termux_display_api.h"
+#include <termux/render/render.h>  // for connectToRender, get_connFd, etc.
 
 namespace KWin
 {
