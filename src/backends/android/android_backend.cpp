@@ -128,7 +128,7 @@ bool AndroidBackend::connectToDisplayServer()
     // Get shared resources from termux-wayland library
     m_lorieBuffer = get_lorieBuffer();
     m_serverState = get_serverState();
-    m_connFd = get_conn_fd();
+    m_connFd = get_connFd();
     
     if (!m_lorieBuffer) {
         qCritical() << "Failed to get LorieBuffer";
