@@ -8,10 +8,14 @@
 
 #pragma once
 
-#include "core/output.h"
+#include "core/backendoutput.h"
 
 namespace KWin
 {
+
+class OutputLayer;
+class OutputFrame;
+
 namespace Android
 {
 

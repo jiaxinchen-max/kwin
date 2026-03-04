@@ -9,6 +9,8 @@
 #include "android_output.h"
 #include "android_backend.h"
 #include "termux_display_api.h"
+#include "core/outputframe.h"
+#include "core/outputlayer.h"
 
 namespace KWin
 {

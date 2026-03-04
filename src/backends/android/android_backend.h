@@ -10,6 +10,7 @@
 
 #include "core/inputbackend.h"
 #include "core/outputbackend.h"
+#include "core/inputdevice.h"
 #include <QObject>
 #include <QSocketNotifier>
 
