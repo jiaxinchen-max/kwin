@@ -14,6 +14,8 @@
 #include "opengl/glrendertimequery.h"
 #include "opengl/glutils.h"
 #include "core/renderloop.h"
+#include <termux/render/render.h>  // for lorie_mutex_lock/unlock
+#include <termux/render/buffer.h>  // for LorieBuffer_description
 
 #include <QOpenGLContext>
 #include <android/hardware_buffer.h>

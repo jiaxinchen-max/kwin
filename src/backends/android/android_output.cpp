@@ -11,6 +11,8 @@
 #include "termux_display_api.h"
 #include "core/outputlayer.h"
 #include "core/renderloop.h"
+#include <termux/render/render.h>  // for lorie_mutex_lock/unlock
+#include <termux/render/buffer.h>  // for LorieBuffer_description
 
 namespace KWin
 {

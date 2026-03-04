@@ -26,136 +26,13 @@ extern "C" {
 // Forward declarations from termux-display-client
 struct AHardwareBuffer;
 
-/**
- * LorieBuffer descriptor
- * Contains information about the shared buffer
- */
-typedef struct {
-    int32_t width;
-    int32_t height;
-    int32_t stride;
-    int8_t format;
-    int8_t type;
-    struct AHardwareBuffer* buffer;
-    void* data;
-} LorieBuffer_Desc;
-
-/**
- * LorieBuffer handle
- * Opaque type representing a shared buffer
- */
-typedef struct LorieBuffer LorieBuffer;
-
-/**
- * Shared server state
- * Used for synchronization between client and server
- */
-typedef struct {
-    pthread_mutex_t lock;
-    pid_t lockingPid;
-    pthread_cond_t cond;
-    volatile uint8_t drawRequested;
-    volatile uint8_t surfaceAvailable;
-    volatile uint8_t waitForNextFrame;
-    // Cursor data follows...
-} lorie_shared_server_state;
-
-/**
- * Event types
- */
-enum {
-    EVENT_SCREEN_CONFIG = 1,
-    EVENT_TOUCH = 2,
-    EVENT_MOUSE = 3,
-    EVENT_KEY = 4,
-    EVENT_CLIPBOARD = 5,
-    EVENT_ADD_BUFFER = 6,
-    EVENT_APPLY_BUFFER = 7,
-    EVENT_APPLY_SHARED_SERVER_STATE = 8,
-};
-
-/**
- * Touch event data
- */
-typedef struct {
-    int32_t type;  // 0=down, 1=up, 2=motion
-    int32_t id;
-    float x;
-    float y;
-} TouchEvent;
-
-/**
- * Mouse event data
- */
-typedef struct {
-    float x;
-    float y;
-    uint8_t down;
-    uint8_t relative;
-    uint8_t detail;
-} MouseEvent;
-
-/**
- * Key event data
- */
-typedef struct {
-    uint32_t key;
-    uint8_t state;  // 0=released, 1=pressed
-} KeyEvent;
-
-/**
- * Screen config data
- */
-typedef struct {
-    int32_t width;
-    int32_t height;
-    int32_t format;
-    int32_t type;
-} ScreenConfig;
-
-/**
- * Event union
- */
-typedef union {
-    uint8_t type;
-    struct {
-        uint8_t eventType;
-        TouchEvent touch;
-    } touchEvent;
-    struct {
-        uint8_t eventType;
-        MouseEvent mouse;
-    } mouseEvent;
-    struct {
-        uint8_t eventType;
-        KeyEvent key;
-    } keyEvent;
-    struct {
-        uint8_t eventType;
-        ScreenConfig screenSize;
-    } screenEvent;
-} lorieEvent;
+// All types are defined in termux-render library headers
+// This file only provides C++ convenience wrappers
 
 // All API functions are declared in termux-render library headers
 // No need to redeclare them here
 
-// Mutex helpers for cross-process synchronization
-
-/**
- * Lock the server state mutex
- */
-static inline void lorie_mutex_lock(pthread_mutex_t* lock, pid_t* lockingPid) {
-    pthread_mutex_lock(lock);
-    *lockingPid = getpid();
-}
-
-/**
- * Unlock the server state mutex
- */
-static inline void lorie_mutex_unlock(pthread_mutex_t* lock, pid_t* lockingPid) {
-    *lockingPid = 0;
-    pthread_mutex_unlock(lock);
-}
+// Mutex helpers are defined in termux-render library headers
 
 #ifdef __cplusplus
 }
