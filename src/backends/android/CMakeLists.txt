@@ -6,12 +6,29 @@ set(ANDROID_BACKEND_SOURCES
     android_egl_backend.cpp
 )
 
-# Compile Android backend directly into kwin (not as separate module)
-# This ensures proper initialization order and symbol resolution
-target_sources(kwin PRIVATE ${ANDROID_BACKEND_SOURCES})
+# Create Android backend as a MODULE library
+add_library(KWinAndroidBackend MODULE ${ANDROID_BACKEND_SOURCES})
 
-# Add current directory to include path for Android backend sources
-target_include_directories(kwin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(KWinAndroidBackend
+    kwin
+    Qt::Core
+    Qt::Gui
+    EGL::EGL
+    epoxy::epoxy
+)
 
-# Link termux-render library to kwin for Android backend functionality
-target_link_libraries(kwin PRIVATE termux-render)
+# Link termux-render library
+find_library(TERMUX_RENDER_LIB NAMES termux-render)
+
+if(TERMUX_RENDER_LIB)
+    message(STATUS "Found termux-render library: ${TERMUX_RENDER_LIB}")
+    target_link_libraries(KWinAndroidBackend ${TERMUX_RENDER_LIB})
+else()
+    message(FATAL_ERROR "termux-render library not found")
+endif()
+
+# termux-render headers are in system include path
+
+install(TARGETS KWinAndroidBackend
+    LIBRARY DESTINATION ${KDE_INSTALL_PLUGINDIR}/org.kde.kwin.backends
+)
