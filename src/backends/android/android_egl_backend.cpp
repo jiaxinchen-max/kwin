@@ -230,7 +230,7 @@ void AndroidEglBackend::init()
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Using EGL context from termux-render shared library";
+    qInfo() << "Using EGL display from termux-render shared library";
     
     // Use the EGL display from the shared library renderer
     if (!m_eglRenderer.initialized) {
@@ -247,13 +247,10 @@ bool AndroidEglBackend::initializeEgl()
     
     setEglDisplay(display.release());
     
-    // For now, we'll let KWin create its own context that shares with the library's context
-    // This ensures compatibility with KWin's rendering pipeline
     qInfo() << "EGL display initialized successfully using shared library";
     qInfo() << "KWin will create its own compatible context";
     return true;
 }
-
 
 void AndroidEglBackend::createOutputLayers(BackendOutput *output)
 {
@@ -281,7 +278,6 @@ void AndroidEglBackend::cleanupSurfaces()
 {
     m_outputs.clear();
 }
-
 
 } // namespace Android
 } // namespace KWin
