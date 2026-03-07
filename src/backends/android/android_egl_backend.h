@@ -9,14 +9,16 @@
 #pragma once
 
 #include "core/outputlayer.h"
+#include "core/renderbackend.h"
 #include "opengl/eglbackend.h"
+#include "opengl/glframebuffer.h"
 
 #include <QObject>
 #include <memory>
 
-// Include termux-render headers for buffer management
-#include <termux/render/buffer.h>
-#include <termux/render/render.h>
+// Forward declare Buffer type from termux-render
+struct Buffer_Desc;
+typedef struct Buffer_Desc Buffer;
 
 namespace KWin
 {
@@ -52,7 +54,7 @@ public:
 private:
     AndroidEglBackend *const m_backend;
     std::unique_ptr<GLFramebuffer> m_fbo;
-    std::unique_ptr<GLRenderTimeQuery> m_renderTime;
+    std::unique_ptr<CpuRenderTimeQuery> m_renderTime;
     
     // Buffer management using termux-render library
     Buffer *m_buffer = nullptr;
@@ -80,8 +82,8 @@ public:
     ~AndroidEglBackend() override;
 
     void init() override;
-    void present(BackendOutput *output, const std::shared_ptr<OutputFrame> &frame) override;
-    BackendOutput *findOutput(EGLNativeWindowType window) const override;
+    void present(BackendOutput *output, const std::shared_ptr<OutputFrame> &frame);
+    BackendOutput *findOutput(EGLNativeWindowType window) const;
     
     QList<OutputLayer *> compatibleOutputLayers(BackendOutput *output) override;
     

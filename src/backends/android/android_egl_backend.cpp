@@ -10,10 +10,10 @@
 #include "android_backend.h"
 #include "android_output.h"
 #include "core/graphicsbuffer.h"
+#include "core/renderbackend.h"
 #include "opengl/egldisplay.h"
 #include "opengl/eglcontext.h"
 #include "opengl/glframebuffer.h"
-#include "opengl/glrendertimequery.h"
 #include "utils/softwarevsyncmonitor.h"
 
 #include <QDebug>
@@ -27,6 +27,16 @@
 #include <termux/render/buffer.h>
 #include <termux/render/render.h>
 #include <termux/render/tlog.h>
+
+// Define Buffer type properly
+struct Buffer_Desc {
+    int width;
+    int height; 
+    int format;
+    void *data;
+    size_t size;
+};
+typedef struct Buffer_Desc Buffer;
 
 // EGL and OpenGL headers
 #include <EGL/egl.h>
@@ -70,7 +80,7 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
         return std::nullopt;
     }
     
-    m_renderTime = std::make_unique<GLRenderTimeQuery>();
+    m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     
     return OutputLayerBeginFrameInfo{
         .renderTarget = RenderTarget(m_fbo.get()),

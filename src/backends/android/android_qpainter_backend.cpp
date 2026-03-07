@@ -22,6 +22,16 @@
 #include <termux/render/render.h>
 #include <termux/render/tlog.h>
 
+// Define Buffer type properly
+struct Buffer_Desc {
+    int width;
+    int height; 
+    int format;
+    void *data;
+    size_t size;
+};
+typedef struct Buffer_Desc Buffer;
+
 namespace KWin
 {
 namespace Android

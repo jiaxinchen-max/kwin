@@ -19,38 +19,15 @@
 
 // termux-wayland library headers
 #include "termux_display_api.h"
-#include <termux/render/render.h>  // for connectToRender, get_connFd, etc.
+#include <termux/render/render.h>  // for connectToRender, get_connFd, android_to_linux_keycode, etc.
 
 namespace KWin
 {
 namespace Android
 {
 
-// Android to Linux keycode conversion table
-static const int android_to_linux_keycode[304] = {
-    [4] = KEY_ESC,
-    [7] = KEY_0, [8] = KEY_1, [9] = KEY_2, [10] = KEY_3, [11] = KEY_4,
-    [12] = KEY_5, [13] = KEY_6, [14] = KEY_7, [15] = KEY_8, [16] = KEY_9,
-    [19] = KEY_UP, [20] = KEY_DOWN, [21] = KEY_LEFT, [22] = KEY_RIGHT,
-    [23] = KEY_ENTER,
-    [29] = KEY_A, [30] = KEY_B, [31] = KEY_C, [32] = KEY_D, [33] = KEY_E,
-    [34] = KEY_F, [35] = KEY_G, [36] = KEY_H, [37] = KEY_I, [38] = KEY_J,
-    [39] = KEY_K, [40] = KEY_L, [41] = KEY_M, [42] = KEY_N, [43] = KEY_O,
-    [44] = KEY_P, [45] = KEY_Q, [46] = KEY_R, [47] = KEY_S, [48] = KEY_T,
-    [49] = KEY_U, [50] = KEY_V, [51] = KEY_W, [52] = KEY_X, [53] = KEY_Y,
-    [54] = KEY_Z,
-    [57] = KEY_LEFTALT, [58] = KEY_RIGHTALT,
-    [59] = KEY_LEFTSHIFT, [60] = KEY_RIGHTSHIFT,
-    [61] = KEY_TAB, [62] = KEY_SPACE,
-    [66] = KEY_ENTER, [67] = KEY_BACKSPACE,
-    [111] = KEY_ESC, [112] = KEY_DELETE,
-    [113] = KEY_LEFTCTRL, [114] = KEY_RIGHTCTRL,
-    [115] = KEY_CAPSLOCK, [117] = KEY_LEFTMETA, [118] = KEY_RIGHTMETA,
-    [122] = KEY_HOME, [123] = KEY_END, [124] = KEY_INSERT,
-    [131] = KEY_F1, [132] = KEY_F2, [133] = KEY_F3, [134] = KEY_F4,
-    [135] = KEY_F5, [136] = KEY_F6, [137] = KEY_F7, [138] = KEY_F8,
-    [139] = KEY_F9, [140] = KEY_F10, [141] = KEY_F11, [142] = KEY_F12,
-};
+// Use the keycode conversion table from termux-render library
+// (defined in termux/render/render.h)
 
 AndroidBackend::AndroidBackend(QObject *parent)
     : OutputBackend(parent)
@@ -285,6 +262,8 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         int linuxKeycode = key.key;
         
         // Convert Android keycode to Linux keycode if needed
+        // Use the android_to_linux_keycode array from termux-render library
+        extern int android_to_linux_keycode[304];
         if (key.key < 304 && android_to_linux_keycode[key.key] != 0) {
             linuxKeycode = android_to_linux_keycode[key.key];
         }

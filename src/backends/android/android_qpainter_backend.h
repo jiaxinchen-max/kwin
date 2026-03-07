@@ -16,9 +16,9 @@
 #include <QObject>
 #include <memory>
 
-// Include termux-render headers for buffer management
-#include <termux/render/buffer.h>
-#include <termux/render/render.h>
+// Forward declare Buffer type from termux-render
+struct Buffer_Desc;
+typedef struct Buffer_Desc Buffer;
 
 namespace KWin
 {
