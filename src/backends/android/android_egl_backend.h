@@ -15,6 +15,8 @@
 #include <epoxy/gl.h>
 #include <unordered_map>
 #include <memory>
+#include <dlfcn.h>
+#include <termux/render/egl_renderer.h>
 
 namespace KWin
 {
@@ -56,10 +58,7 @@ private:
     AndroidEglBackend *m_backend;
     AndroidOutput *m_output;
     
-    // EGL/OpenGL resources
-    EGLImageKHR m_eglImage = EGL_NO_IMAGE;
-    GLuint m_texture = 0;
-    GLuint m_framebuffer = 0;
+    // OpenGL resources (EGL resources managed by shared library)
     std::unique_ptr<GLFramebuffer> m_fbo;
     std::unique_ptr<GLRenderTimeQuery> m_query;
     
@@ -85,15 +84,19 @@ public:
     DrmDevice *drmDevice() const override;
     
     AndroidBackend *backend() const { return m_backend; }
+    bool isAndroidEglExtensionsAvailable() const { return egl_renderer_has_android_extensions(&m_eglRenderer); }
+    EglRenderer *eglRenderer() { return &m_eglRenderer; }
 
 private:
     bool initializeEgl();
-    bool createEglContext();
     void createOutputLayers(BackendOutput *output);
     void cleanupSurfaces() override;
     
     AndroidBackend *m_backend;
     std::unordered_map<BackendOutput *, std::unique_ptr<AndroidEglLayer>> m_outputs;
+    
+    // Use termux-render shared library for EGL operations
+    EglRenderer m_eglRenderer;
 };
 
 } // namespace Android

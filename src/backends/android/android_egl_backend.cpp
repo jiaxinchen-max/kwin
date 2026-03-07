@@ -48,22 +48,15 @@ void AndroidEglLayer::cleanup()
     
     m_backend->openglContext()->makeCurrent();
     
-    if (m_framebuffer) {
-        glDeleteFramebuffers(1, &m_framebuffer);
-        m_framebuffer = 0;
+    // Clean up dummy framebuffer
+    if (m_fbo) {
+        GLuint fboId = m_fbo->handle();
+        if (fboId != 0) {
+            glDeleteFramebuffers(1, &fboId);
+        }
+        m_fbo.reset();
     }
     
-    if (m_texture) {
-        glDeleteTextures(1, &m_texture);
-        m_texture = 0;
-    }
-    
-    if (m_eglImage != EGL_NO_IMAGE) {
-        eglDestroyImageKHR(m_backend->eglDisplayObject()->handle(), m_eglImage);
-        m_eglImage = EGL_NO_IMAGE;
-    }
-    
-    m_fbo.reset();
     m_initialized = false;
 }
 
@@ -88,78 +81,21 @@ bool AndroidEglLayer::setupRenderTarget()
         return false;
     }
     
-    qInfo() << "Setting up render target for AHardwareBuffer:" << desc->width << "x" << desc->height;
+    qInfo() << "Setting up render target using termux-render library:" << desc->width << "x" << desc->height;
     
-    // Convert AHardwareBuffer to EGLClientBuffer
-    EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(ahb);
-    if (!clientBuffer) {
-        qCritical() << "eglGetNativeClientBufferANDROID failed";
+    // Use the shared library's EGL renderer to setup the render target
+    EglRenderer *renderer = m_backend->eglRenderer();
+    if (!egl_renderer_setup_target(renderer, ahb, desc->width, desc->height)) {
+        qCritical() << "Failed to setup render target using shared library";
         return false;
     }
     
-    // Create EGLImage from AHardwareBuffer
-    const EGLint imageAttribs[] = {
-        EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
-        EGL_NONE
-    };
-    
-    m_eglImage = eglCreateImageKHR(
-        m_backend->eglDisplayObject()->handle(),
-        EGL_NO_CONTEXT,
-        EGL_NATIVE_BUFFER_ANDROID,
-        clientBuffer,
-        imageAttribs
-    );
-    
-    if (m_eglImage == EGL_NO_IMAGE) {
-        qCritical() << "eglCreateImageKHR failed:" << eglGetError();
-        return false;
-    }
-    
-    qInfo() << "EGLImage created successfully";
-    
-    // Create OpenGL texture and bind EGLImage to it
-    glGenTextures(1, &m_texture);
-    glBindTexture(GL_TEXTURE_2D, m_texture);
-    
-    // Bind EGLImage to texture
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)m_eglImage);
-    
-    GLenum error = glGetError();
-    if (error != GL_NO_ERROR) {
-        qCritical() << "glEGLImageTargetTexture2DOES failed:" << error;
-        cleanup();
-        return false;
-    }
-    
-    // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
-    qInfo() << "OpenGL texture created and bound to EGLImage";
-    
-    // Create framebuffer and attach the texture
-    glGenFramebuffers(1, &m_framebuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0);
-    
-    // Check framebuffer status
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        qCritical() << "Framebuffer incomplete:" << status;
-        cleanup();
-        return false;
-    }
-    
-    qInfo() << "Framebuffer created and complete";
-    
-    // Create GLFramebuffer wrapper
-    m_fbo = std::make_unique<GLFramebuffer>(m_framebuffer, QSize(desc->width, desc->height));
-    
-    // Unbind framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Create GLFramebuffer wrapper using a dummy framebuffer ID
+    // The actual rendering is managed by the shared library
+    // We create a minimal wrapper to satisfy KWin's rendering pipeline
+    GLuint dummyFbo = 0;
+    glGenFramebuffers(1, &dummyFbo);
+    m_fbo = std::make_unique<GLFramebuffer>(dummyFbo, QSize(desc->width, desc->height));
     
     m_initialized = true;
     qInfo() << "Render target setup complete";
@@ -180,8 +116,12 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
         return std::nullopt;
     }
     
-    // Bind our framebuffer for rendering
-    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+    // Use shared library to begin frame
+    EglRenderer *renderer = m_backend->eglRenderer();
+    if (!egl_renderer_begin_frame(renderer)) {
+        qCritical() << "Failed to begin frame using shared library";
+        return std::nullopt;
+    }
     
     // Start render time query
     m_query = std::make_unique<GLRenderTimeQuery>(m_backend->openglContextRef());
@@ -204,12 +144,12 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
         }
     }
     
-    // Ensure all rendering commands are flushed to the AHardwareBuffer
-    glFlush();
-    glFinish();  // Wait for GPU to complete
-    
-    // Unbind framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Use shared library to end frame
+    EglRenderer *renderer = m_backend->eglRenderer();
+    if (!egl_renderer_end_frame(renderer)) {
+        qCritical() << "Failed to end frame using shared library";
+        return false;
+    }
     
     // Signal termux-app that a new frame is ready
     lorie_shared_server_state *state = m_backend->backend()->serverState();
@@ -245,24 +185,31 @@ QHash<uint32_t, QList<uint64_t>> AndroidEglLayer::supportedDrmFormats() const
 AndroidEglBackend::AndroidEglBackend(AndroidBackend *backend)
     : m_backend(backend)
 {
+    // Initialize EGL renderer from termux-render library
+    memset(&m_eglRenderer, 0, sizeof(m_eglRenderer));
 }
 
 AndroidEglBackend::~AndroidEglBackend()
 {
     cleanup();
+    egl_renderer_cleanup(&m_eglRenderer);
 }
 
 void AndroidEglBackend::init()
 {
-    qInfo() << "Initializing Android EGL backend";
+    qInfo() << "Initializing Android EGL backend using termux-render library";
     
-    if (!initializeEgl()) {
-        setFailed("Failed to initialize EGL");
+    // Initialize EGL renderer from shared library
+    if (!egl_renderer_init(&m_eglRenderer)) {
+        setFailed("Failed to initialize EGL renderer from termux-render library");
         return;
     }
     
-    if (!createEglContext()) {
-        setFailed("Failed to create EGL context");
+    // Print renderer information
+    egl_renderer_print_info(&m_eglRenderer);
+    
+    if (!initializeEgl()) {
+        setFailed("Failed to initialize EGL");
         return;
     }
     
@@ -272,116 +219,41 @@ void AndroidEglBackend::init()
         createOutputLayers(output);
     }
     
-    qInfo() << "Android EGL backend initialized successfully";
+    qInfo() << "Android EGL backend initialized successfully using shared library";
 }
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Initializing EGL";
+    qInfo() << "Using EGL context from termux-render shared library";
     
-    // Get EGL display
-    EGLDisplay eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (eglDisplay == EGL_NO_DISPLAY) {
-        qCritical() << "eglGetDisplay failed";
+    // Use the EGL display from the shared library renderer
+    if (!m_eglRenderer.initialized) {
+        qCritical() << "EGL renderer not initialized";
         return false;
     }
     
-    // Initialize EGL
-    EGLint major, minor;
-    if (!eglInitialize(eglDisplay, &major, &minor)) {
-        qCritical() << "eglInitialize failed:" << eglGetError();
-        return false;
-    }
-    
-    qInfo() << "EGL version:" << major << "." << minor;
-    
-    // Create EglDisplay wrapper
-    auto display = EglDisplay::create(eglDisplay);
+    // Create EglDisplay wrapper from the shared library's EGL display
+    auto display = EglDisplay::create(m_eglRenderer.display);
     if (!display) {
-        qCritical() << "Failed to create EglDisplay";
-        eglTerminate(eglDisplay);
+        qCritical() << "Failed to create EglDisplay from shared library";
         return false;
     }
     
     setEglDisplay(display.release());
     
-    // Bind OpenGL ES API
-    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-        qCritical() << "eglBindAPI(EGL_OPENGL_ES_API) failed:" << eglGetError();
+    // Create EglContext wrapper from the shared library's EGL context
+    auto context = EglContext::create(m_eglRenderer.context, m_eglRenderer.display, m_eglRenderer.config);
+    if (!context) {
+        qCritical() << "Failed to create EglContext from shared library";
         return false;
     }
     
-    qInfo() << "EGL initialized successfully";
+    setContext(context.release());
+    
+    qInfo() << "EGL initialized successfully using shared library";
     return true;
 }
 
-bool AndroidEglBackend::createEglContext()
-{
-    qInfo() << "Creating EGL context";
-    
-    // Choose EGL config for OpenGL ES 3.0
-    const EGLint configAttribs[] = {
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_NONE
-    };
-    
-    EGLConfig config;
-    EGLint numConfigs;
-    if (!eglChooseConfig(m_display->handle(), configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
-        qCritical() << "eglChooseConfig failed:" << eglGetError();
-        return false;
-    }
-    
-    qInfo() << "EGL config chosen";
-    
-    // Create EGL context for OpenGL ES 3.0
-    if (!createContext(config)) {
-        qCritical() << "Failed to create EGL context";
-        return false;
-    }
-    
-    // Create a pbuffer surface for makeCurrent (since we render to FBO)
-    const EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE
-    };
-    
-    EGLSurface pbuffer = eglCreatePbufferSurface(m_display->handle(), config, pbufferAttribs);
-    if (pbuffer == EGL_NO_SURFACE) {
-        qCritical() << "eglCreatePbufferSurface failed:" << eglGetError();
-        return false;
-    }
-    
-    // Make context current
-    if (!eglMakeCurrent(m_display->handle(), pbuffer, pbuffer, m_context->handle())) {
-        qCritical() << "eglMakeCurrent failed:" << eglGetError();
-        eglDestroySurface(m_display->handle(), pbuffer);
-        return false;
-    }
-    
-    qInfo() << "EGL context created and made current";
-    qInfo() << "GL_VENDOR:" << (const char*)glGetString(GL_VENDOR);
-    qInfo() << "GL_RENDERER:" << (const char*)glGetString(GL_RENDERER);
-    qInfo() << "GL_VERSION:" << (const char*)glGetString(GL_VERSION);
-    
-    // Check required extensions
-    if (!hasExtension(QByteArrayLiteral("EGL_KHR_image_base"))) {
-        qWarning() << "EGL_KHR_image_base not available";
-    }
-    if (!hasExtension(QByteArrayLiteral("EGL_ANDROID_get_native_client_buffer"))) {
-        qWarning() << "EGL_ANDROID_get_native_client_buffer not available";
-    }
-    if (!hasExtension(QByteArrayLiteral("EGL_ANDROID_image_native_buffer"))) {
-        qWarning() << "EGL_ANDROID_image_native_buffer not available";
-    }
-    
-    return true;
-}
 
 void AndroidEglBackend::createOutputLayers(BackendOutput *output)
 {
@@ -409,6 +281,7 @@ void AndroidEglBackend::cleanupSurfaces()
 {
     m_outputs.clear();
 }
+
 
 } // namespace Android
 } // namespace KWin
