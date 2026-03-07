@@ -89,6 +89,7 @@ public:
 
 private:
     bool initializeEgl();
+    bool createEglContext();
     void createOutputLayers(BackendOutput *output);
     void cleanupSurfaces() override;
     

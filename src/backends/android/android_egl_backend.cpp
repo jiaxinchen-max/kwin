@@ -214,7 +214,7 @@ void AndroidEglBackend::init()
     }
     
     // Create EGL context using KWin's standard process
-    if (!createContext()) {
+    if (!createEglContext()) {
         setFailed("Failed to create EGL context");
         return;
     }
@@ -249,6 +249,39 @@ bool AndroidEglBackend::initializeEgl()
     
     qInfo() << "EGL display initialized successfully using shared library";
     qInfo() << "KWin will create its own compatible context";
+    return true;
+}
+
+bool AndroidEglBackend::createEglContext()
+{
+    qInfo() << "Creating EGL context";
+    
+    // Choose EGL config for OpenGL ES 2.0
+    const EGLint configAttribs[] = {
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_NONE
+    };
+    
+    EGLConfig config;
+    EGLint numConfigs;
+    if (!eglChooseConfig(eglDisplayObject()->handle(), configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+        qCritical() << "eglChooseConfig failed:" << eglGetError();
+        return false;
+    }
+    
+    qInfo() << "EGL config chosen";
+    
+    // Create EGL context using KWin's method
+    if (!createContext(config)) {
+        qCritical() << "Failed to create EGL context";
+        return false;
+    }
+    
+    qInfo() << "EGL context created successfully";
     return true;
 }
 
