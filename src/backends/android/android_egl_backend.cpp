@@ -213,6 +213,12 @@ void AndroidEglBackend::init()
         return;
     }
     
+    // Create EGL context using KWin's standard process
+    if (!createContext()) {
+        setFailed("Failed to create EGL context");
+        return;
+    }
+    
     // Create output layers for existing outputs
     const auto outputs = m_backend->outputs();
     for (BackendOutput *output : outputs) {
@@ -241,16 +247,10 @@ bool AndroidEglBackend::initializeEgl()
     
     setEglDisplay(display.release());
     
-    // Create EglContext wrapper from the shared library's EGL context
-    auto context = EglContext::create(m_eglRenderer.context, m_eglRenderer.display, m_eglRenderer.config);
-    if (!context) {
-        qCritical() << "Failed to create EglContext from shared library";
-        return false;
-    }
-    
-    setContext(context.release());
-    
-    qInfo() << "EGL initialized successfully using shared library";
+    // For now, we'll let KWin create its own context that shares with the library's context
+    // This ensures compatibility with KWin's rendering pipeline
+    qInfo() << "EGL display initialized successfully using shared library";
+    qInfo() << "KWin will create its own compatible context";
     return true;
 }
 
