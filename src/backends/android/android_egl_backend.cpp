@@ -98,8 +98,8 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
         // Bind our framebuffer to read from it
         glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
         
-        // Get buffer description
-        const Buffer_Desc *desc = Buffer_description(m_buffer);
+        // Get buffer description (using LorieBuffer API)
+        const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
         if (desc && desc->data) {
             // Read pixels from framebuffer
             glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, desc->data);
@@ -648,22 +648,22 @@ Buffer *AndroidEglBackend::createBuffer(int width, int height)
 {
     qDebug() << "Creating buffer:" << width << "x" << height;
     
-    // Use termux-render library to create buffer
-    Buffer *buffer = Buffer_create(width, height, BUFFER_FORMAT_ARGB8888);
+    // Use termux-render library to create buffer (using LorieBuffer API)
+    LorieBuffer *buffer = LorieBuffer_create(width, height, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM);
     if (!buffer) {
         qCritical() << "Failed to create buffer using termux-render library";
         return nullptr;
     }
     
     qInfo() << "Created buffer successfully";
-    return buffer;
+    return (Buffer*)buffer;
 }
 
 void AndroidEglBackend::releaseBuffer(Buffer *buffer)
 {
     if (buffer) {
         qDebug() << "Releasing buffer";
-        Buffer_destroy(buffer);
+        LorieBuffer_destroy((LorieBuffer*)buffer);
     }
 }
 

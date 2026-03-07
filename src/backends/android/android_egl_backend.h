@@ -46,6 +46,9 @@ public:
     DrmDevice *scanoutDevice() const override;
     QHash<uint32_t, QList<uint64_t>> supportedDrmFormats() const override;
     void releaseBuffers() override;
+    
+    // Access to the output
+    BackendOutput *output() const { return m_output; }
 
     // Setup render target using termux-render buffer
     bool setupRenderTarget();
@@ -60,7 +63,6 @@ private:
     Buffer *m_buffer = nullptr;
     GLuint m_texture = 0;
     GLuint m_framebuffer = 0;
-    bool m_bufferDirty = false;
     
     int m_width = 0;
     int m_height = 0;

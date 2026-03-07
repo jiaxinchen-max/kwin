@@ -104,7 +104,7 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
         QImage *sourceImage = m_current->view()->image();
         if (sourceImage && !sourceImage->isNull()) {
             // Get buffer description
-            const Buffer_Desc *desc = Buffer_description(m_buffer);
+            const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
             if (desc && desc->data) {
                 // Convert QImage to the buffer format
                 QImage convertedImage = sourceImage->convertToFormat(QImage::Format_ARGB32);
@@ -212,21 +212,21 @@ Buffer *AndroidQPainterBackend::createBuffer(int width, int height)
     qDebug() << "Creating buffer:" << width << "x" << height;
     
     // Use termux-render library to create buffer
-    Buffer *buffer = Buffer_create(width, height, BUFFER_FORMAT_ARGB8888);
+    LorieBuffer *buffer = LorieBuffer_create(width, height, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM);
     if (!buffer) {
         qCritical() << "Failed to create buffer using termux-render library";
         return nullptr;
     }
     
     qInfo() << "Created buffer successfully";
-    return buffer;
+    return (Buffer*)buffer;
 }
 
 void AndroidQPainterBackend::releaseBuffer(Buffer *buffer)
 {
     if (buffer) {
         qDebug() << "Releasing buffer";
-        Buffer_destroy(buffer);
+        LorieBuffer_destroy((LorieBuffer*)buffer);
     }
 }
 
