@@ -38,12 +38,17 @@ public:
     bool testPresentation(const std::shared_ptr<OutputFrame> &frame) override;
     bool present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame) override;
     void updateEnabled(bool enabled);
+    
+    // Layer management
+    void setOutputLayer(OutputLayer *layer);
+    OutputLayer *outputLayer() const;
 
 private:
     void updateMode();
     
     AndroidBackend *m_backend;
     std::unique_ptr<RenderLoop> m_renderLoop;
+    OutputLayer *m_outputLayer = nullptr;
 };
 
 } // namespace Android

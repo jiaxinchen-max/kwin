@@ -9,125 +9,69 @@
 #include "android_egl_backend.h"
 #include "android_backend.h"
 #include "android_output.h"
+#include "core/graphicsbuffer.h"
+#include "opengl/egldisplay.h"
 #include "opengl/eglcontext.h"
 #include "opengl/glframebuffer.h"
 #include "opengl/glrendertimequery.h"
-#include "opengl/glutils.h"
-#include "core/renderloop.h"
-#include <termux/render/render.h>  // for lorie_mutex_lock/unlock
-#include <termux/render/buffer.h>  // for LorieBuffer_description
+#include "utils/softwarevsyncmonitor.h"
 
-#include <QOpenGLContext>
-#include <android/hardware_buffer.h>
-#include "termux_display_api.h"
+#include <QDebug>
+#include <QFile>
+#include <QProcess>
+#include <dlfcn.h>
+#include <unistd.h>
+#include <cstdlib>
+
+// Include termux-render headers
+#include <termux/render/buffer.h>
+#include <termux/render/render.h>
+#include <termux/render/tlog.h>
+
+// EGL and OpenGL headers
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 namespace KWin
 {
 namespace Android
 {
 
-// AndroidEglLayer implementation
-
-AndroidEglLayer::AndroidEglLayer(AndroidOutput *output, AndroidEglBackend *backend)
-    : OutputLayer(output, OutputLayerType::Primary, 0, 0, 0)
+AndroidEglLayer::AndroidEglLayer(BackendOutput *output, AndroidEglBackend *backend)
+    : OutputLayer(output, OutputLayerType::Primary)
     , m_backend(backend)
-    , m_output(output)
 {
+    qInfo() << "Created AndroidEglLayer for output" << output->name();
 }
 
 AndroidEglLayer::~AndroidEglLayer()
 {
     cleanup();
-}
-
-void AndroidEglLayer::cleanup()
-{
-    if (!m_backend->openglContext()) {
-        return;
-    }
-    
-    m_backend->openglContext()->makeCurrent();
-    
-    // Clean up dummy framebuffer
-    if (m_fbo) {
-        GLuint fboId = m_fbo->handle();
-        if (fboId != 0) {
-            glDeleteFramebuffers(1, &fboId);
-        }
-        m_fbo.reset();
-    }
-    
-    m_initialized = false;
-}
-
-bool AndroidEglLayer::setupRenderTarget()
-{
-    if (m_initialized) {
-        return true;
-    }
-    
-    if (!m_backend->openglContext()->makeCurrent()) {
-        qCritical() << "Failed to make OpenGL context current";
-        return false;
-    }
-    
-    // Get the AHardwareBuffer from termux-wayland
-    LorieBuffer *lorieBuffer = m_backend->backend()->lorieBuffer();
-    const LorieBuffer_Desc *desc = LorieBuffer_description(lorieBuffer);
-    AHardwareBuffer *ahb = desc->buffer;
-    
-    if (!ahb) {
-        qCritical() << "AHardwareBuffer is null";
-        return false;
-    }
-    
-    qInfo() << "Setting up render target using termux-render library:" << desc->width << "x" << desc->height;
-    
-    // Use the shared library's EGL renderer to setup the render target
-    EglRenderer *renderer = m_backend->eglRenderer();
-    if (!egl_renderer_setup_target(renderer, ahb, desc->width, desc->height)) {
-        qCritical() << "Failed to setup render target using shared library";
-        return false;
-    }
-    
-    // Create GLFramebuffer wrapper using a dummy framebuffer ID
-    // The actual rendering is managed by the shared library
-    // We create a minimal wrapper to satisfy KWin's rendering pipeline
-    GLuint dummyFbo = 0;
-    glGenFramebuffers(1, &dummyFbo);
-    m_fbo = std::make_unique<GLFramebuffer>(dummyFbo, QSize(desc->width, desc->height));
-    
-    m_initialized = true;
-    qInfo() << "Render target setup complete";
-    
-    return true;
+    qInfo() << "Destroyed AndroidEglLayer";
 }
 
 std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
 {
-    if (!m_backend->openglContext()->makeCurrent()) {
-        qCritical() << "Failed to make OpenGL context current in doBeginFrame";
+    const QSize nativeSize(m_output->modeSize());
+    qDebug() << "AndroidEglLayer::doBeginFrame() - size:" << nativeSize;
+    
+    // Setup render target if needed
+    if (m_width != nativeSize.width() || m_height != nativeSize.height() || !m_fbo) {
+        if (!setupRenderTarget()) {
+            qCritical() << "Failed to setup render target";
+            return std::nullopt;
+        }
+    }
+    
+    if (!m_fbo) {
+        qCritical() << "No framebuffer available";
         return std::nullopt;
     }
     
-    // Setup render target if not already initialized
-    if (!m_initialized && !setupRenderTarget()) {
-        qCritical() << "Failed to setup render target";
-        return std::nullopt;
-    }
+    m_renderTime = std::make_unique<GLRenderTimeQuery>();
     
-    // Use shared library to begin frame
-    EglRenderer *renderer = m_backend->eglRenderer();
-    if (!egl_renderer_begin_frame(renderer)) {
-        qCritical() << "Failed to begin frame using shared library";
-        return std::nullopt;
-    }
-    
-    // Start render time query
-    m_query = std::make_unique<GLRenderTimeQuery>(m_backend->openglContextRef());
-    m_query->begin();
-    
-    // Return render target info
     return OutputLayerBeginFrameInfo{
         .renderTarget = RenderTarget(m_fbo.get()),
         .repaint = Region::infinite(),
@@ -136,127 +80,201 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
 
 bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame)
 {
-    // End render time query
-    if (m_query) {
-        m_query->end();
-        if (frame) {
-            frame->addRenderTimeQuery(std::move(m_query));
+    m_renderTime->end();
+    frame->addRenderTimeQuery(std::move(m_renderTime));
+    
+    // Copy the rendered framebuffer to the termux-render buffer
+    if (m_buffer && m_framebuffer) {
+        // Bind our framebuffer to read from it
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
+        
+        // Get buffer description
+        const Buffer_Desc *desc = Buffer_description(m_buffer);
+        if (desc && desc->data) {
+            // Read pixels from framebuffer
+            glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, desc->data);
+            
+            qDebug() << "Copied frame to termux-render buffer:" << desc->width << "x" << desc->height;
         }
-    }
-    
-    // Use shared library to end frame
-    EglRenderer *renderer = m_backend->eglRenderer();
-    if (!egl_renderer_end_frame(renderer)) {
-        qCritical() << "Failed to end frame using shared library";
-        return false;
-    }
-    
-    // Signal termux-app that a new frame is ready
-    lorie_shared_server_state *state = m_backend->backend()->serverState();
-    if (state) {
-        lorie_mutex_lock(&state->lock, &state->lockingPid);
-        state->drawRequested = 1;
-        pthread_cond_signal(&state->cond);
-        lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     }
     
     return true;
 }
 
-void AndroidEglLayer::releaseBuffers()
+bool AndroidEglLayer::setupRenderTarget()
 {
-    // Clean up any allocated resources
+    const QSize nativeSize(m_output->modeSize());
+    qInfo() << "Setting up render target:" << nativeSize;
+    
+    // Clean up existing resources
     cleanup();
+    
+    m_width = nativeSize.width();
+    m_height = nativeSize.height();
+    
+    // Create termux-render buffer
+    m_buffer = m_backend->createBuffer(m_width, m_height);
+    if (!m_buffer) {
+        qCritical() << "Failed to create termux-render buffer";
+        return false;
+    }
+    
+    // Create OpenGL texture
+    glGenTextures(1, &m_texture);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    // Create framebuffer
+    glGenFramebuffers(1, &m_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0);
+    
+    // Check framebuffer completeness
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        qCritical() << "Framebuffer incomplete:" << status;
+        cleanup();
+        return false;
+    }
+    
+    // Create GLFramebuffer wrapper
+    m_fbo = std::make_unique<GLFramebuffer>(m_framebuffer, QSize(m_width, m_height));
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    qInfo() << "Render target setup successful";
+    return true;
+}
+
+void AndroidEglLayer::cleanup()
+{
+    if (m_framebuffer) {
+        glDeleteFramebuffers(1, &m_framebuffer);
+        m_framebuffer = 0;
+    }
+    
+    if (m_texture) {
+        glDeleteTextures(1, &m_texture);
+        m_texture = 0;
+    }
+    
+    if (m_buffer) {
+        m_backend->releaseBuffer(m_buffer);
+        m_buffer = nullptr;
+    }
+    
+    m_fbo.reset();
 }
 
 DrmDevice *AndroidEglLayer::scanoutDevice() const
 {
+    // Android backend doesn't use DRM
     return nullptr;
 }
 
 QHash<uint32_t, QList<uint64_t>> AndroidEglLayer::supportedDrmFormats() const
 {
-    // Return empty - we don't support DRM format negotiation
-    return {};
+    // Return common formats for software rendering
+    return {{DRM_FORMAT_ARGB8888, {DRM_FORMAT_MOD_LINEAR}}};
 }
 
-// AndroidEglBackend implementation
+void AndroidEglLayer::releaseBuffers()
+{
+    cleanup();
+}
 
 AndroidEglBackend::AndroidEglBackend(AndroidBackend *backend)
     : m_backend(backend)
 {
-    // Initialize EGL renderer from termux-render library
-    memset(&m_eglRenderer, 0, sizeof(m_eglRenderer));
+    qInfo() << "Initializing Android EGL backend with Mesa rendering";
+    
+    // Detect best rendering mode
+    RenderingMode mode = detectBestRenderingMode();
+    m_mesaAvailable = (mode != RenderingMode::Fallback);
+    
+    if (!m_mesaAvailable) {
+        qWarning() << "Mesa not available - EGL backend may not work";
+    } else {
+        setupMesaRendering(mode);
+    }
 }
 
 AndroidEglBackend::~AndroidEglBackend()
 {
-    cleanup();
-    egl_renderer_cleanup(&m_eglRenderer);
+    qInfo() << "Destroying Android EGL backend";
+    
+    // Clean up layers
+    for (AndroidEglLayer *layer : m_layers) {
+        delete layer;
+    }
+    m_layers.clear();
 }
 
 void AndroidEglBackend::init()
 {
-    qInfo() << "Initializing Android EGL backend using termux-render library";
-    
-    // Initialize EGL renderer from shared library
-    if (!egl_renderer_init(&m_eglRenderer)) {
-        setFailed("Failed to initialize EGL renderer from termux-render library");
-        return;
-    }
-    
-    // Print renderer information
-    egl_renderer_print_info(&m_eglRenderer);
+    qInfo() << "Initializing Android EGL backend";
     
     if (!initializeEgl()) {
         setFailed("Failed to initialize EGL");
         return;
     }
     
-    // Create EGL context using KWin's standard process
-    if (!createEglContext()) {
-        setFailed("Failed to create EGL context");
-        return;
-    }
+    // Connect to backend signals
+    connect(m_backend, &AndroidBackend::outputAdded, this, &AndroidEglBackend::addOutput);
     
-    // Create output layers for existing outputs
+    // Add existing outputs
     const auto outputs = m_backend->outputs();
     for (BackendOutput *output : outputs) {
-        createOutputLayers(output);
+        addOutput(output);
     }
     
-    qInfo() << "Android EGL backend initialized successfully using shared library";
+    qInfo() << "Android EGL backend initialized with" << m_layers.size() << "layers";
 }
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Using EGL display from termux-render shared library";
+    qInfo() << "Initializing EGL for software rendering";
     
-    // Use the EGL display from the shared library renderer
-    if (!m_eglRenderer.initialized) {
-        qCritical() << "EGL renderer not initialized";
+    // Get EGL display - use default display for software rendering
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display == EGL_NO_DISPLAY) {
+        qCritical() << "Failed to get EGL display";
         return false;
     }
     
-    // Create EglDisplay wrapper from the shared library's EGL display
-    auto display = EglDisplay::create(m_eglRenderer.display);
-    if (!display) {
-        qCritical() << "Failed to create EglDisplay from shared library";
+    // Initialize EGL
+    EGLint major, minor;
+    if (!eglInitialize(display, &major, &minor)) {
+        EGLint error = eglGetError();
+        qCritical() << "eglInitialize failed:" << Qt::hex << error;
         return false;
     }
     
-    setEglDisplay(display.release());
+    qInfo() << "EGL initialized - version:" << major << "." << minor;
     
-    qInfo() << "EGL display initialized successfully using shared library";
-    qInfo() << "KWin will create its own compatible context";
-    return true;
-}
-
-bool AndroidEglBackend::createEglContext()
-{
-    qInfo() << "Creating EGL context";
+    // Bind OpenGL ES API
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        qCritical() << "Failed to bind OpenGL ES API";
+        return false;
+    }
     
-    // Choose EGL config for OpenGL ES 2.0
+    // Create EGL display wrapper
+    auto eglDisplay = EglDisplay::create(display);
+    if (!eglDisplay) {
+        qCritical() << "Failed to create EglDisplay";
+        return false;
+    }
+    
+    setEglDisplay(eglDisplay.release());
+    
+    // Choose EGL config
     const EGLint configAttribs[] = {
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE, 8,
@@ -268,49 +286,392 @@ bool AndroidEglBackend::createEglContext()
     
     EGLConfig config;
     EGLint numConfigs;
-    if (!eglChooseConfig(eglDisplayObject()->handle(), configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
-        qCritical() << "eglChooseConfig failed:" << eglGetError();
+    if (!eglChooseConfig(display, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+        qCritical() << "Failed to choose EGL config";
         return false;
     }
     
-    qInfo() << "EGL config chosen";
+    // Create EGL context
+    const EGLint contextAttribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE
+    };
     
-    // Create EGL context using KWin's method
-    if (!createContext(config)) {
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttribs);
+    if (context == EGL_NO_CONTEXT) {
         qCritical() << "Failed to create EGL context";
         return false;
     }
     
-    qInfo() << "EGL context created successfully";
+    // Create pbuffer surface for off-screen rendering
+    const EGLint pbufferAttribs[] = {
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
+        EGL_NONE
+    };
+    
+    EGLSurface surface = eglCreatePbufferSurface(display, config, pbufferAttribs);
+    if (surface == EGL_NO_SURFACE) {
+        qCritical() << "Failed to create pbuffer surface";
+        eglDestroyContext(display, context);
+        return false;
+    }
+    
+    // Make context current
+    if (!eglMakeCurrent(display, surface, surface, context)) {
+        qCritical() << "Failed to make EGL context current";
+        eglDestroySurface(display, surface);
+        eglDestroyContext(display, context);
+        return false;
+    }
+    
+    qInfo() << "EGL context created and made current";
+    
+    // Log OpenGL information
+    qInfo() << "OpenGL Vendor:" << (const char*)glGetString(GL_VENDOR);
+    qInfo() << "OpenGL Renderer:" << (const char*)glGetString(GL_RENDERER);
+    qInfo() << "OpenGL Version:" << (const char*)glGetString(GL_VERSION);
+    
     return true;
 }
 
-void AndroidEglBackend::createOutputLayers(BackendOutput *output)
+void AndroidEglBackend::present(BackendOutput *output, const std::shared_ptr<OutputFrame> &frame)
 {
-    AndroidOutput *androidOutput = static_cast<AndroidOutput *>(output);
-    auto layer = std::make_unique<AndroidEglLayer>(androidOutput, this);
-    m_outputs[output] = std::move(layer);
+    // For software rendering, presentation is handled in doEndFrame
+    // where we copy the framebuffer to the termux-render buffer
+    Q_UNUSED(output)
+    Q_UNUSED(frame)
+}
+
+BackendOutput *AndroidEglBackend::findOutput(EGLNativeWindowType window) const
+{
+    // Not applicable for Android backend
+    Q_UNUSED(window)
+    return nullptr;
 }
 
 QList<OutputLayer *> AndroidEglBackend::compatibleOutputLayers(BackendOutput *output)
 {
-    auto it = m_outputs.find(output);
-    if (it == m_outputs.end()) {
-        createOutputLayers(output);
-        it = m_outputs.find(output);
+    // Find the layer for this output
+    for (AndroidEglLayer *layer : m_layers) {
+        if (layer->output() == output) {
+            return {layer};
+        }
     }
-    return {it->second.get()};
+    
+    // If no layer exists, create one
+    addOutput(output);
+    
+    // Try again
+    for (AndroidEglLayer *layer : m_layers) {
+        if (layer->output() == output) {
+            return {layer};
+        }
+    }
+    
+    return {};
 }
 
-DrmDevice *AndroidEglBackend::drmDevice() const
+bool AndroidEglBackend::isMesaAvailable()
 {
-    return nullptr;
+    // Check if Mesa library is available
+    void *mesaLib = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!mesaLib) {
+        mesaLib = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    }
+    
+    if (mesaLib) {
+        dlclose(mesaLib);
+        qInfo() << "Mesa library detected";
+        return true;
+    }
+    
+    // Check if mesa package is installed
+    if (QFile::exists("/data/data/com.termux/files/usr/lib/libGL.so") ||
+        QFile::exists("/data/data/com.termux/files/usr/lib/libGL.so.1")) {
+        qInfo() << "Mesa library found in Termux";
+        return true;
+    }
+    
+    qWarning() << "Mesa library not found";
+    return false;
 }
 
-void AndroidEglBackend::cleanupSurfaces()
+bool AndroidEglBackend::isZinkAvailable()
 {
-    m_outputs.clear();
+    // Check if Vulkan is available (required for Zink)
+    void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!vulkanLib) {
+        vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
+    }
+    
+    if (!vulkanLib) {
+        qInfo() << "Vulkan library not found - Zink not available";
+        return false;
+    }
+    
+    dlclose(vulkanLib);
+    
+    // Detect environment type
+    bool inPRoot = detectPRootEnvironment();
+    bool inContainer = detectContainerEnvironment();
+    
+    qInfo() << "Environment detection:";
+    qInfo() << "  PRoot:" << inPRoot;
+    qInfo() << "  Container:" << inContainer;
+    qInfo() << "  Plain Termux:" << (!inPRoot && !inContainer);
+    
+    // Check GPU device access based on environment
+    if (inContainer) {
+        // Real containers: check actual device files
+        if (QFile::exists("/dev/dri/card0") || QFile::exists("/dev/dri/renderD128")) {
+            qInfo() << "Container: GPU device files found - Zink available";
+            return true;
+        }
+    } else if (inPRoot) {
+        // PRoot: check both real and virtual device files
+        if (checkPRootGPUAccess()) {
+            qInfo() << "PRoot: GPU access available - Zink may work";
+            return true;
+        }
+    } else {
+        // Plain Termux: very limited GPU access
+        qInfo() << "Plain Termux: GPU devices not accessible - Zink not available";
+        return false;
+    }
+    
+    qInfo() << "No GPU access found - Zink not available";
+    return false;
+}
+
+bool AndroidEglBackend::detectPRootEnvironment()
+{
+    // Check for PRoot-specific environment variables
+    if (getenv("PROOT_TMP_DIR") || getenv("PROOT_LOADER")) {
+        return true;
+    }
+    
+    // Check if we're in a chroot-like environment
+    QFile procMounts("/proc/mounts");
+    if (procMounts.open(QIODevice::ReadOnly)) {
+        QString content = procMounts.readAll();
+        if (content.contains("proot") || content.contains("bind")) {
+            return true;
+        }
+    }
+    
+    // Check for typical PRoot mount points
+    if (QFile::exists("/proc/version") && QFile::exists("/system/bin")) {
+        QFile version("/proc/version");
+        if (version.open(QIODevice::ReadOnly)) {
+            QString versionStr = version.readAll();
+            // PRoot often shows different kernel version than Android
+            if (!versionStr.contains("Android")) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+bool AndroidEglBackend::detectContainerEnvironment()
+{
+    // Check for container-specific files
+    if (QFile::exists("/.dockerenv")) {
+        return true;
+    }
+    
+    // Check cgroup for container indicators
+    QFile cgroup("/proc/1/cgroup");
+    if (cgroup.open(QIODevice::ReadOnly)) {
+        QString content = cgroup.readAll();
+        if (content.contains("docker") || content.contains("lxc") || 
+            content.contains("systemd") || content.contains("container")) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool AndroidEglBackend::checkPRootGPUAccess()
+{
+    // In PRoot, GPU devices might be mapped differently
+    QStringList possiblePaths = {
+        "/dev/dri/card0",
+        "/dev/dri/renderD128",
+        "/dev/dri/renderD129",
+        "/sys/class/drm/card0",
+        "/proc/dri/0",
+        // PRoot might map these to different locations
+        "/dev/graphics/fb0",
+        "/dev/mali",
+        "/dev/kgsl-3d0"
+    };
+    
+    for (const QString &path : possiblePaths) {
+        if (QFile::exists(path)) {
+            qInfo() << "Found potential GPU device:" << path;
+            
+            // Try to open the device to test actual access
+            QFile device(path);
+            if (device.open(QIODevice::ReadOnly)) {
+                qInfo() << "GPU device accessible:" << path;
+                device.close();
+                return true;
+            } else {
+                qInfo() << "GPU device exists but not accessible:" << path;
+            }
+        }
+    }
+    
+    // Check if Vulkan can actually enumerate devices
+    return testVulkanDeviceEnumeration();
+}
+
+bool AndroidEglBackend::testVulkanDeviceEnumeration()
+{
+    // Try to load Vulkan and enumerate devices
+    void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!vulkanLib) {
+        vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
+    }
+    
+    if (!vulkanLib) {
+        return false;
+    }
+    
+    // Get Vulkan function pointers
+    typedef int (*vkEnumerateInstanceExtensionPropertiesFunc)(const char*, uint32_t*, void*);
+    auto vkEnumerateInstanceExtensionProperties = 
+        (vkEnumerateInstanceExtensionPropertiesFunc)dlsym(vulkanLib, "vkEnumerateInstanceExtensionProperties");
+    
+    if (vkEnumerateInstanceExtensionProperties) {
+        uint32_t extensionCount = 0;
+        int result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+        
+        dlclose(vulkanLib);
+        
+        if (result == 0 && extensionCount > 0) {
+            qInfo() << "Vulkan found" << extensionCount << "extensions - GPU may be accessible";
+            return true;
+        }
+    }
+    
+    dlclose(vulkanLib);
+    return false;
+}
+
+AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
+{
+    // Priority order: Zink (hardware) > llvmpipe (software) > fallback
+    
+    if (isZinkAvailable() && isMesaAvailable()) {
+        qInfo() << "Zink hardware acceleration available";
+        return RenderingMode::ZinkHardware;
+    }
+    
+    if (isMesaAvailable()) {
+        qInfo() << "Mesa software rendering available";
+        return RenderingMode::LlvmpipeSoftware;
+    }
+    
+    qWarning() << "No Mesa support - falling back to QPainter";
+    return RenderingMode::Fallback;
+}
+
+void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
+{
+    switch (mode) {
+    case RenderingMode::ZinkHardware:
+        qInfo() << "Configuring Mesa for Zink hardware acceleration";
+        
+        // Use Zink driver for hardware acceleration
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 1);
+        setenv("GALLIUM_DRIVER", "zink", 1);
+        setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1);
+        setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
+        
+        // Enable hardware features
+        unsetenv("LIBGL_ALWAYS_SOFTWARE");
+        setenv("MESA_NO_ERROR", "1", 1);
+        
+        // Vulkan optimization
+        setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
+        
+        qInfo() << "Zink hardware acceleration configured";
+        qInfo() << "GALLIUM_DRIVER=" << getenv("GALLIUM_DRIVER");
+        break;
+        
+    case RenderingMode::LlvmpipeSoftware:
+        qInfo() << "Configuring Mesa for llvmpipe software rendering";
+        
+        // Force software rendering
+        setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe", 1);
+        setenv("GALLIUM_DRIVER", "llvmpipe", 1);
+        setenv("MESA_GL_VERSION_OVERRIDE", "2.1", 1);
+        setenv("MESA_GLSL_VERSION_OVERRIDE", "120", 1);
+        
+        // Optimize software rendering
+        setenv("MESA_NO_ERROR", "1", 1);
+        setenv("LP_NUM_THREADS", "4", 1);  // Use multiple CPU threads
+        
+        qInfo() << "Mesa software rendering configured";
+        qInfo() << "LIBGL_ALWAYS_SOFTWARE=" << getenv("LIBGL_ALWAYS_SOFTWARE");
+        break;
+        
+    case RenderingMode::Fallback:
+        qWarning() << "No Mesa rendering configured - will use QPainter fallback";
+        break;
+    }
+    
+    // Common Mesa settings
+    if (mode != RenderingMode::Fallback) {
+        setenv("MESA_DEBUG", "silent", 1);
+        qInfo() << "Mesa rendering mode configured successfully";
+    }
+}
+
+Buffer *AndroidEglBackend::createBuffer(int width, int height)
+{
+    qDebug() << "Creating buffer:" << width << "x" << height;
+    
+    // Use termux-render library to create buffer
+    Buffer *buffer = Buffer_create(width, height, BUFFER_FORMAT_ARGB8888);
+    if (!buffer) {
+        qCritical() << "Failed to create buffer using termux-render library";
+        return nullptr;
+    }
+    
+    qInfo() << "Created buffer successfully";
+    return buffer;
+}
+
+void AndroidEglBackend::releaseBuffer(Buffer *buffer)
+{
+    if (buffer) {
+        qDebug() << "Releasing buffer";
+        Buffer_destroy(buffer);
+    }
+}
+
+void AndroidEglBackend::addOutput(BackendOutput *output)
+{
+    qInfo() << "Adding output to EGL backend:" << output->name();
+    
+    // Create layer for this output
+    AndroidEglLayer *layer = new AndroidEglLayer(output, this);
+    m_layers.append(layer);
+    
+    // Set the layer on the output if it's an AndroidOutput
+    if (auto androidOutput = qobject_cast<AndroidOutput *>(output)) {
+        androidOutput->setOutputLayer(layer);
+    }
 }
 
 } // namespace Android
 } // namespace KWin
+
+#include "android_egl_backend.moc"

@@ -4,6 +4,7 @@ set(ANDROID_BACKEND_SOURCES
     android_backend.cpp
     android_output.cpp
     android_egl_backend.cpp
+    android_qpainter_backend.cpp
 )
 
 # Create Android backend as a MODULE library
@@ -15,6 +16,7 @@ target_link_libraries(KWinAndroidBackend
     Qt::Gui
     EGL::EGL
     epoxy::epoxy
+    dl
 )
 
 # Link termux-render library

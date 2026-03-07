@@ -39,7 +39,7 @@ This backend enables KWin (KDE's Wayland compositor) to run natively in Termux o
 ## Key Features
 
 - **Zero-Copy Rendering**: Direct GPU rendering to `AHardwareBuffer` shared with Android
-- **Full GPU Acceleration**: Uses OpenGL ES 3.0+ via Android's EGL
+- **CPU-based Rendering**: Uses QPainter for software rendering (EGL not available in Termux)
 - **Native Performance**: No VNC/X11 forwarding overhead
 - **Complete Desktop Environment**: Full KDE Plasma desktop in Termux
 - **Input Support**: Touch, keyboard, and pointer input via termux-app

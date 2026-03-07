@@ -8,6 +8,7 @@
 
 #include "android_backend.h"
 #include "android_egl_backend.h"
+#include "android_qpainter_backend.h"
 #include "android_output.h"
 #include "core/session.h"
 #include "input.h"
@@ -164,24 +165,47 @@ std::unique_ptr<InputBackend> AndroidBackend::createInputBackend()
 
 std::unique_ptr<EglBackend> AndroidBackend::createOpenGLBackend()
 {
-    return std::make_unique<AndroidEglBackend>(this);
+    qInfo() << "Creating Android OpenGL backend";
+    
+    // Check if Mesa is available for software rendering
+    if (AndroidEglBackend::isMesaAvailable()) {
+        qInfo() << "Mesa detected - creating EGL backend with software rendering";
+        return std::make_unique<AndroidEglBackend>(this);
+    } else {
+        qWarning() << "Mesa not available - OpenGL backend not supported";
+        qWarning() << "Install mesa package: pkg install mesa";
+        return nullptr;
+    }
 }
 
 std::unique_ptr<QPainterBackend> AndroidBackend::createQPainterBackend()
 {
-    // QPainter backend not implemented for Android
-    return nullptr;
+    qInfo() << "Creating Android QPainter backend";
+    return std::make_unique<AndroidQPainterBackend>(this);
 }
 
 EglDisplay *AndroidBackend::sceneEglDisplayObject() const
 {
-    // Will be set by AndroidEglBackend
+    // Will be set by AndroidEglBackend if Mesa is available
     return nullptr;
 }
 
 QList<CompositingType> AndroidBackend::supportedCompositors() const
 {
-    return {OpenGLCompositing};
+    QList<CompositingType> compositors;
+    
+    // Check if Mesa is available for OpenGL software rendering
+    if (AndroidEglBackend::isMesaAvailable()) {
+        qInfo() << "Mesa available - supporting OpenGL compositing";
+        compositors.append(OpenGLCompositing);
+    } else {
+        qInfo() << "Mesa not available - OpenGL compositing not supported";
+    }
+    
+    // QPainter is always supported as fallback
+    compositors.append(QPainterCompositing);
+    
+    return compositors;
 }
 
 QList<BackendOutput *> AndroidBackend::outputs() const

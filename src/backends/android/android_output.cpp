@@ -93,5 +93,15 @@ void AndroidOutput::updateEnabled(bool enabled)
     setState(state);
 }
 
+void AndroidOutput::setOutputLayer(OutputLayer *layer)
+{
+    m_outputLayer = layer;
+}
+
+OutputLayer *AndroidOutput::outputLayer() const
+{
+    return m_outputLayer;
+}
+
 } // namespace Android
 } // namespace KWin

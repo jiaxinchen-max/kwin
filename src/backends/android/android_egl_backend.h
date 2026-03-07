@@ -8,68 +8,68 @@
 
 #pragma once
 
-#include "opengl/eglbackend.h"
 #include "core/outputlayer.h"
+#include "opengl/eglbackend.h"
 
-#include <epoxy/egl.h>
-#include <epoxy/gl.h>
-#include <unordered_map>
+#include <QObject>
 #include <memory>
-#include <dlfcn.h>
-#include <termux/render/egl_renderer.h>
+
+// Include termux-render headers for buffer management
+#include <termux/render/buffer.h>
+#include <termux/render/render.h>
 
 namespace KWin
 {
-
-class GLFramebuffer;
-class GLRenderTimeQuery;
-
 namespace Android
 {
 
 class AndroidBackend;
-class AndroidOutput;
 class AndroidEglBackend;
 
 /**
- * @brief OpenGL rendering layer for Android
+ * @brief EGL rendering layer for Android backend using Mesa software rendering
  * 
- * This layer renders directly into the AHardwareBuffer provided by
- * the termux-app display service.
+ * This layer handles OpenGL ES rendering using Mesa's llvmpipe software renderer.
+ * It avoids JavaVM dependencies by using Mesa's software implementation.
  */
 class AndroidEglLayer : public OutputLayer
 {
-    Q_OBJECT
-
 public:
-    AndroidEglLayer(AndroidOutput *output, AndroidEglBackend *backend);
+    AndroidEglLayer(BackendOutput *output, AndroidEglBackend *backend);
     ~AndroidEglLayer() override;
 
     std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override;
     bool doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame) override;
-    void releaseBuffers() override;
+    
     DrmDevice *scanoutDevice() const override;
     QHash<uint32_t, QList<uint64_t>> supportedDrmFormats() const override;
+    void releaseBuffers() override;
 
-private:
+    // Setup render target using termux-render buffer
     bool setupRenderTarget();
     void cleanup();
-    
-    AndroidEglBackend *m_backend;
-    AndroidOutput *m_output;
-    
-    // OpenGL resources (EGL resources managed by shared library)
+
+private:
+    AndroidEglBackend *const m_backend;
     std::unique_ptr<GLFramebuffer> m_fbo;
-    std::unique_ptr<GLRenderTimeQuery> m_query;
+    std::unique_ptr<GLRenderTimeQuery> m_renderTime;
     
-    bool m_initialized = false;
+    // Buffer management using termux-render library
+    Buffer *m_buffer = nullptr;
+    GLuint m_texture = 0;
+    GLuint m_framebuffer = 0;
+    bool m_bufferDirty = false;
+    
+    int m_width = 0;
+    int m_height = 0;
 };
 
 /**
- * @brief OpenGL ES backend for Android
+ * @brief EGL backend for Android using Mesa software rendering
  * 
- * Uses EGL to create an OpenGL ES context and imports the AHardwareBuffer
- * from termux-app as the render target via EGLImage.
+ * This backend uses Mesa's llvmpipe software renderer to provide OpenGL ES
+ * functionality without requiring hardware GPU access or JavaVM integration.
+ * It's specifically designed for Termux environments.
  */
 class AndroidEglBackend : public EglBackend
 {
@@ -80,24 +80,45 @@ public:
     ~AndroidEglBackend() override;
 
     void init() override;
-    QList<OutputLayer *> compatibleOutputLayers(BackendOutput *output) override;
-    DrmDevice *drmDevice() const override;
+    void present(BackendOutput *output, const std::shared_ptr<OutputFrame> &frame) override;
+    BackendOutput *findOutput(EGLNativeWindowType window) const override;
     
-    AndroidBackend *backend() const { return m_backend; }
-    bool isAndroidEglExtensionsAvailable() const { return egl_renderer_has_android_extensions(&m_eglRenderer); }
-    EglRenderer *eglRenderer() { return &m_eglRenderer; }
+    QList<OutputLayer *> compatibleOutputLayers(BackendOutput *output) override;
+    
+    // Android-specific methods
+    AndroidBackend *androidBackend() const { return m_backend; }
+    
+    // Rendering mode detection
+    enum class RenderingMode {
+        ZinkHardware,      // Zink driver with GPU acceleration
+        LlvmpipeSoftware,  // llvmpipe software rendering
+        Fallback           // No Mesa support
+    };
+    
+    static bool isMesaAvailable();
+    static bool isZinkAvailable();
+    static RenderingMode detectBestRenderingMode();
+    static void setupMesaRendering(RenderingMode mode);
+    
+    // Environment detection
+    static bool detectPRootEnvironment();
+    static bool detectContainerEnvironment();
+    static bool checkPRootGPUAccess();
+    static bool testVulkanDeviceEnumeration();
+    
+    // Buffer management
+    Buffer *createBuffer(int width, int height);
+    void releaseBuffer(Buffer *buffer);
 
 private:
     bool initializeEgl();
-    bool createEglContext();
-    void createOutputLayers(BackendOutput *output);
-    void cleanupSurfaces() override;
+    void addOutput(BackendOutput *output);
+
+    AndroidBackend *const m_backend;
+    QList<AndroidEglLayer *> m_layers;
     
-    AndroidBackend *m_backend;
-    std::unordered_map<BackendOutput *, std::unique_ptr<AndroidEglLayer>> m_outputs;
-    
-    // Use termux-render shared library for EGL operations
-    EglRenderer m_eglRenderer;
+    // Mesa detection
+    bool m_mesaAvailable = false;
 };
 
 } // namespace Android
