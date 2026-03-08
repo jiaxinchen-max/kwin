@@ -31,7 +31,7 @@ export QT_XCB_GL_INTEGRATION=none
 # Check dependencies
 echo "Checking dependencies..."
 
-if [ ! -f "$PREFIX/lib/libwayland.so" ]; then
+if [ ! -f "$PREFIX/lib/libtermux-render.so" ]; then
     echo "Error: termux-display-client library not found"
     echo "Please install termux-display-client first"
     exit 1
