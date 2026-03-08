@@ -13,7 +13,6 @@
 #include "core/inputdevice.h"
 #include <QObject>
 #include <QSocketNotifier>
-#include "termux_display_api.h"
 
 // Include termux-render headers for complete type definitions
 #include <termux/render/render.h>

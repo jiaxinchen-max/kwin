@@ -17,8 +17,7 @@
 #include <linux/input-event-codes.h>
 #include <unistd.h>
 
-// termux-wayland library headers
-#include "termux_display_api.h"
+// termux-render library headers
 #include <termux/render/render.h>  // for connectToRender, get_connFd, android_to_linux_keycode, etc.
 
 // External symbol from termux-render library

@@ -8,7 +8,7 @@
 
 #include "android_output.h"
 #include "android_backend.h"
-#include "termux_display_api.h"
+// termux_display_api.h removed - using termux/render/render.h directly
 #include "core/outputlayer.h"
 #include "core/renderloop.h"
 #include <termux/render/render.h>  // for lorie_mutex_lock/unlock
