@@ -11,6 +11,7 @@
 #include "core/outputlayer.h"
 #include "core/renderbackend.h"
 #include "qpainter/qpainterbackend.h"
+#include "qpainter/qpainterswapchain.h"
 
 #include <QList>
 #include <QObject>
@@ -27,8 +28,6 @@ namespace Android
 
 class AndroidBackend;
 class AndroidQPainterBackend;
-class QPainterSwapchainSlot;
-class QPainterSwapchain;
 
 /**
  * @brief QPainter rendering layer for Android backend
@@ -49,6 +48,8 @@ public:
     DrmDevice *scanoutDevice() const override;
     QHash<uint32_t, QList<uint64_t>> supportedDrmFormats() const override;
     void releaseBuffers() override;
+    
+    BackendOutput *output() const { return m_output; }
 
 private:
     AndroidQPainterBackend *const m_backend;
@@ -58,8 +59,6 @@ private:
     
     // Buffer management using termux-render library
     Buffer *m_buffer = nullptr;
-    QImage m_image;
-    bool m_bufferDirty = false;
 };
 
 /**

@@ -75,16 +75,13 @@ std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
         return std::nullopt;
     }
 
-    // Create or update termux-render buffer
-    if (!m_buffer || m_bufferDirty) {
-        // Don't release the buffer - it's a global shared resource
-        // Get the global termux-render buffer (initialized by connectToRender)
+    // Get the global termux-render buffer (initialized by connectToRender)
+    if (!m_buffer) {
         m_buffer = (Buffer*)get_lorieBuffer();
         if (!m_buffer) {
             qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
             return std::nullopt;
         }
-        m_bufferDirty = false;
     }
 
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
@@ -108,7 +105,7 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
             struct lorie_shared_server_state *serverState = get_serverState();
             if (!serverState) {
                 qCritical() << "Failed to get server state";
-                return;
+                return true;
             }
             
             // Lock the shared buffer
@@ -118,7 +115,7 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
             if (ret != 0) {
                 qCritical() << "Failed to lock LorieBuffer";
                 lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
-                return;
+                return true;
             }
             
             // Get buffer description
