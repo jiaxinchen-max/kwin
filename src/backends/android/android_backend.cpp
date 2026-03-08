@@ -21,6 +21,11 @@
 #include "termux_display_api.h"
 #include <termux/render/render.h>  // for connectToRender, get_connFd, android_to_linux_keycode, etc.
 
+// External symbol from termux-render library
+extern "C" {
+    extern int android_to_linux_keycode[304];
+}
+
 namespace KWin
 {
 namespace Android
@@ -263,7 +268,6 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         
         // Convert Android keycode to Linux keycode if needed
         // Use the android_to_linux_keycode array from termux-render library
-        extern int android_to_linux_keycode[304];
         if (key.key < 304 && android_to_linux_keycode[key.key] != 0) {
             linuxKeycode = android_to_linux_keycode[key.key];
         }
