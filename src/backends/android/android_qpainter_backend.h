@@ -83,8 +83,7 @@ public:
     AndroidBackend *androidBackend() const { return m_backend; }
     
     // Buffer management
-    Buffer *createBuffer(int width, int height);
-    void releaseBuffer(Buffer *buffer);
+    // Buffer management is handled by termux-render library
 
 private:
     void addOutput(BackendOutput *output);

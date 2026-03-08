@@ -111,8 +111,7 @@ public:
     static bool testVulkanDeviceEnumeration();
     
     // Buffer management
-    Buffer *createBuffer(int width, int height);
-    void releaseBuffer(Buffer *buffer);
+    // Buffer management is handled by termux-render library
 
 private:
     bool initializeEgl();

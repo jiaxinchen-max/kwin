@@ -28,6 +28,10 @@
 #include <termux/render/render.h>
 #include <termux/render/tlog.h>
 
+// External functions from termux-render library
+extern LorieBuffer* get_lorieBuffer();
+extern struct lorie_shared_server_state* get_serverState();
+
 // Define Buffer type properly
 struct Buffer_Desc {
     int width;
@@ -95,19 +99,44 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     
     // Copy the rendered framebuffer to the termux-render buffer
     if (m_buffer && m_framebuffer) {
-        // Bind our framebuffer to read from it
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
-        
-        // Get buffer description (using LorieBuffer API)
-        const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
-        if (desc && desc->data) {
-            // Read pixels from framebuffer
-            glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, desc->data);
-            
-            qDebug() << "Copied frame to termux-render buffer:" << desc->width << "x" << desc->height;
+        // Get server state for locking
+        struct lorie_shared_server_state *serverState = get_serverState();
+        if (!serverState) {
+            qCritical() << "Failed to get server state";
+            return true;
         }
         
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        // Lock the shared buffer
+        void *shared_buffer;
+        lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
+        int ret = LorieBuffer_lock((LorieBuffer*)m_buffer, &shared_buffer);
+        if (ret != 0) {
+            qCritical() << "Failed to lock LorieBuffer";
+            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+            return true;
+        }
+        
+        // Get buffer description
+        const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
+        if (desc && shared_buffer) {
+            // Bind our framebuffer to read from it
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
+            
+            // Read pixels directly into the shared buffer
+            glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
+            
+            // Signal that drawing is requested
+            serverState->waitForNextFrame = false;
+            serverState->drawRequested = 1;
+            pthread_cond_signal(&serverState->cond);
+            
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
+        }
+        
+        // Unlock the buffer
+        LorieBuffer_unlock((LorieBuffer*)m_buffer);
+        lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
     }
     
     return true;
@@ -124,10 +153,10 @@ bool AndroidEglLayer::setupRenderTarget()
     m_width = nativeSize.width();
     m_height = nativeSize.height();
     
-    // Create termux-render buffer
-    m_buffer = m_backend->createBuffer(m_width, m_height);
+    // Get the global termux-render buffer (initialized by connectToRender)
+    m_buffer = (Buffer*)get_lorieBuffer();
     if (!m_buffer) {
-        qCritical() << "Failed to create termux-render buffer";
+        qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
         return false;
     }
     
@@ -175,10 +204,8 @@ void AndroidEglLayer::cleanup()
         m_texture = 0;
     }
     
-    if (m_buffer) {
-        m_backend->releaseBuffer(m_buffer);
-        m_buffer = nullptr;
-    }
+    // Don't release the buffer - it's a global shared resource
+    m_buffer = nullptr;
     
     m_fbo.reset();
 }
@@ -644,28 +671,8 @@ void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
     }
 }
 
-Buffer *AndroidEglBackend::createBuffer(int width, int height)
-{
-    qDebug() << "Creating buffer:" << width << "x" << height;
-    
-    // Use termux-render library to create buffer (using LorieBuffer API)
-    LorieBuffer *buffer = LorieBuffer_create(width, height, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM);
-    if (!buffer) {
-        qCritical() << "Failed to create buffer using termux-render library";
-        return nullptr;
-    }
-    
-    qInfo() << "Created buffer successfully";
-    return (Buffer*)buffer;
-}
-
-void AndroidEglBackend::releaseBuffer(Buffer *buffer)
-{
-    if (buffer) {
-        qDebug() << "Releasing buffer";
-        LorieBuffer_destroy((LorieBuffer*)buffer);
-    }
-}
+// Buffer management is handled by termux-render library
+// No need to create/destroy buffers - they are global shared resources
 
 void AndroidEglBackend::addOutput(BackendOutput *output)
 {

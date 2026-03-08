@@ -22,6 +22,10 @@
 #include <termux/render/render.h>
 #include <termux/render/tlog.h>
 
+// External functions from termux-render library
+extern LorieBuffer* get_lorieBuffer();
+extern struct lorie_shared_server_state* get_serverState();
+
 // Define Buffer type properly
 struct Buffer_Desc {
     int width;
@@ -46,10 +50,8 @@ AndroidQPainterLayer::AndroidQPainterLayer(BackendOutput *output, AndroidQPainte
 
 AndroidQPainterLayer::~AndroidQPainterLayer()
 {
-    if (m_buffer) {
-        m_backend->releaseBuffer(m_buffer);
-        m_buffer = nullptr;
-    }
+    // Don't release the buffer - it's a global shared resource
+    m_buffer = nullptr;
     qInfo() << "Destroyed AndroidQPainterLayer";
 }
 
@@ -75,12 +77,11 @@ std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
 
     // Create or update termux-render buffer
     if (!m_buffer || m_bufferDirty) {
-        if (m_buffer) {
-            m_backend->releaseBuffer(m_buffer);
-        }
-        m_buffer = m_backend->createBuffer(nativeSize.width(), nativeSize.height());
+        // Don't release the buffer - it's a global shared resource
+        // Get the global termux-render buffer (initialized by connectToRender)
+        m_buffer = (Buffer*)get_lorieBuffer();
         if (!m_buffer) {
-            qCritical() << "Failed to create termux-render buffer";
+            qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
             return std::nullopt;
         }
         m_bufferDirty = false;
@@ -103,27 +104,53 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
     if (m_buffer && m_current) {
         QImage *sourceImage = m_current->view()->image();
         if (sourceImage && !sourceImage->isNull()) {
+            // Get server state for locking
+            struct lorie_shared_server_state *serverState = get_serverState();
+            if (!serverState) {
+                qCritical() << "Failed to get server state";
+                return;
+            }
+            
+            // Lock the shared buffer
+            void *shared_buffer;
+            lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
+            int ret = LorieBuffer_lock((LorieBuffer*)m_buffer, &shared_buffer);
+            if (ret != 0) {
+                qCritical() << "Failed to lock LorieBuffer";
+                lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+                return;
+            }
+            
             // Get buffer description
             const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
-            if (desc && desc->data) {
+            if (desc && shared_buffer) {
                 // Convert QImage to the buffer format
                 QImage convertedImage = sourceImage->convertToFormat(QImage::Format_ARGB32);
                 
-                // Copy image data to buffer
+                // Copy image data to shared buffer
                 const int bytesPerLine = desc->width * 4; // ARGB32 = 4 bytes per pixel
                 const int imageBytesPerLine = convertedImage.bytesPerLine();
                 const int copyBytesPerLine = qMin(bytesPerLine, imageBytesPerLine);
                 
                 for (int y = 0; y < qMin(desc->height, convertedImage.height()); ++y) {
                     memcpy(
-                        static_cast<char*>(desc->data) + y * bytesPerLine,
+                        static_cast<char*>(shared_buffer) + y * bytesPerLine,
                         convertedImage.constScanLine(y),
                         copyBytesPerLine
                     );
                 }
                 
-                qDebug() << "Copied frame to termux-render buffer:" << desc->width << "x" << desc->height;
+                // Signal that drawing is requested
+                serverState->waitForNextFrame = false;
+                serverState->drawRequested = 1;
+                pthread_cond_signal(&serverState->cond);
+                
+                qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
             }
+            
+            // Unlock the buffer
+            LorieBuffer_unlock((LorieBuffer*)m_buffer);
+            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
         }
     }
     
@@ -151,10 +178,8 @@ void AndroidQPainterLayer::releaseBuffers()
     m_current.reset();
     m_swapchain.reset();
     
-    if (m_buffer) {
-        m_backend->releaseBuffer(m_buffer);
-        m_buffer = nullptr;
-    }
+    // Don't release the buffer - it's a global shared resource
+    m_buffer = nullptr;
 }
 
 AndroidQPainterBackend::AndroidQPainterBackend(AndroidBackend *backend)
@@ -207,28 +232,8 @@ QList<OutputLayer *> AndroidQPainterBackend::compatibleOutputLayers(BackendOutpu
     return {};
 }
 
-Buffer *AndroidQPainterBackend::createBuffer(int width, int height)
-{
-    qDebug() << "Creating buffer:" << width << "x" << height;
-    
-    // Use termux-render library to create buffer
-    LorieBuffer *buffer = LorieBuffer_create(width, height, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM);
-    if (!buffer) {
-        qCritical() << "Failed to create buffer using termux-render library";
-        return nullptr;
-    }
-    
-    qInfo() << "Created buffer successfully";
-    return (Buffer*)buffer;
-}
-
-void AndroidQPainterBackend::releaseBuffer(Buffer *buffer)
-{
-    if (buffer) {
-        qDebug() << "Releasing buffer";
-        LorieBuffer_destroy((LorieBuffer*)buffer);
-    }
-}
+// Buffer management is handled by termux-render library
+// No need to create/destroy buffers - they are global shared resources
 
 void AndroidQPainterBackend::addOutput(BackendOutput *output)
 {
