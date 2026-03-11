@@ -26,6 +26,11 @@
 // Include termux-render headers
 #include <termux/render/buffer.h>
 #include <termux/render/render.h>
+
+// LorieBuffer constants from buffer.h
+#ifndef LORIEBUFFER_AHARDWAREBUFFER
+#define LORIEBUFFER_AHARDWAREBUFFER 3
+#endif
 #include <termux/render/tlog.h>
 
 // External functions from termux-render library
@@ -47,6 +52,34 @@ typedef struct Buffer_Desc Buffer;
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+
+// Android AHardwareBuffer support (obtained from termux-render)
+#if __ANDROID_API__ >= 26
+#include <android/hardware_buffer.h>
+
+// EGL extensions for AHardwareBuffer
+#ifndef EGL_ANDROID_image_native_buffer
+#define EGL_ANDROID_image_native_buffer 1
+#define EGL_NATIVE_BUFFER_ANDROID         0x3140
+#endif
+
+#ifndef EGL_KHR_image
+#define EGL_KHR_image 1
+typedef void *EGLImageKHR;
+#define EGL_NO_IMAGE_KHR                  ((EGLImageKHR)0)
+#define EGL_IMAGE_PRESERVED_KHR           0x30D2
+EGLAPI EGLImageKHR EGLAPIENTRY eglCreateImageKHR(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClientBuffer buffer, const EGLint *attrib_list);
+EGLAPI EGLBoolean EGLAPIENTRY eglDestroyImageKHR(EGLDisplay dpy, EGLImageKHR image);
+EGLAPI EGLClientBuffer EGLAPIENTRY eglGetNativeClientBufferANDROID(const struct AHardwareBuffer *buffer);
+#endif
+
+#ifndef GL_OES_EGL_image
+#define GL_OES_EGL_image 1
+typedef void* GLeglImageOES;
+GLAPI void GLAPIENTRY glEGLImageTargetTexture2DOES(GLenum target, GLeglImageOES image);
+#endif
+
+#endif
 
 namespace KWin
 {
@@ -79,17 +112,31 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
         }
     }
     
-    if (!m_fbo) {
+    if (m_useDirectRendering) {
+        // Bind the AHardwareBuffer framebuffer for direct rendering
+        glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+        glViewport(0, 0, m_width, m_height);
+        qDebug() << "Using direct rendering to AHardwareBuffer";
+    } else if (!m_fbo) {
         qCritical() << "No framebuffer available";
         return std::nullopt;
     }
     
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     
-    return OutputLayerBeginFrameInfo{
-        .renderTarget = RenderTarget(m_fbo.get()),
-        .repaint = Region::infinite(),
-    };
+    if (m_useDirectRendering) {
+        // Create a temporary GLFramebuffer wrapper for the AHardwareBuffer framebuffer
+        // This allows KWin to render directly to the shared buffer
+        return OutputLayerBeginFrameInfo{
+            .renderTarget = RenderTarget(QSize(m_width, m_height), 1.0),
+            .repaint = Region::infinite(),
+        };
+    } else {
+        return OutputLayerBeginFrameInfo{
+            .renderTarget = RenderTarget(m_fbo.get()),
+            .repaint = Region::infinite(),
+        };
+    }
 }
 
 bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame)
@@ -97,46 +144,65 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     m_renderTime->end();
     frame->addRenderTimeQuery(std::move(m_renderTime));
     
-    // Copy the rendered framebuffer to the termux-render buffer
-    if (m_buffer && m_framebuffer) {
-        // Get server state for locking
+    if (m_useDirectRendering) {
+        // Direct rendering mode - Mesa renders directly to AHardwareBuffer
+        // No pixel copy needed, just signal frame completion
         struct lorie_shared_server_state *serverState = get_serverState();
-        if (!serverState) {
-            qCritical() << "Failed to get server state";
-            return true;
-        }
-        
-        // Lock the shared buffer
-        void *shared_buffer;
-        lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
-        int ret = LorieBuffer_lock((LorieBuffer*)m_buffer, &shared_buffer);
-        if (ret != 0) {
-            qCritical() << "Failed to lock LorieBuffer";
-            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
-            return true;
-        }
-        
-        // Get buffer description
-        const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
-        if (desc && shared_buffer) {
-            // Bind our framebuffer to read from it
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
-            
-            // Read pixels directly into the shared buffer
-            glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
-            
-            // Signal that drawing is requested
+        if (serverState) {
+            lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
             serverState->waitForNextFrame = false;
             serverState->drawRequested = 1;
             pthread_cond_signal(&serverState->cond);
+            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
             
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
+            qDebug() << "Direct rendering frame completed - zero copy";
         }
-        
-        // Unlock the buffer
-        LorieBuffer_unlock((LorieBuffer*)m_buffer);
-        lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+        return true;
+    }
+    
+    // Fallback: Copy EGL framebuffer to shared buffer for display
+    // This is used when direct rendering is not available
+    {
+        if (m_buffer && m_framebuffer) {
+            // Get server state for locking
+            struct lorie_shared_server_state *serverState = get_serverState();
+            if (!serverState) {
+                qCritical() << "Failed to get server state";
+                return true;
+            }
+            
+            // Lock the shared buffer
+            void *shared_buffer;
+            lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
+            int ret = LorieBuffer_lock((LorieBuffer*)m_buffer, &shared_buffer);
+            if (ret != 0) {
+                qCritical() << "Failed to lock LorieBuffer";
+                lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+                return true;
+            }
+            
+            // Get buffer description
+            const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
+            if (desc && shared_buffer) {
+                // Bind our framebuffer to read from it
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
+                
+                // Read pixels directly into the shared buffer
+                glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
+                
+                // Signal that drawing is requested
+                serverState->waitForNextFrame = false;
+                serverState->drawRequested = 1;
+                pthread_cond_signal(&serverState->cond);
+                
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
+            }
+            
+            // Unlock the buffer
+            LorieBuffer_unlock((LorieBuffer*)m_buffer);
+            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+        }
     }
     
     return true;
@@ -159,6 +225,16 @@ bool AndroidEglLayer::setupRenderTarget()
         qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
         return false;
     }
+    
+    // Check if we can use Mesa direct rendering with AHardwareBuffer
+    if (trySetupDirectRendering()) {
+        qInfo() << "Using Mesa direct rendering to AHardwareBuffer";
+        m_useDirectRendering = true;
+        return true;
+    }
+    
+    qInfo() << "Falling back to traditional rendering with glReadPixels";
+    m_useDirectRendering = false;
     
     // Create OpenGL texture
     glGenTextures(1, &m_texture);
@@ -192,8 +268,120 @@ bool AndroidEglLayer::setupRenderTarget()
     return true;
 }
 
+bool AndroidEglLayer::trySetupDirectRendering()
+{
+#if __ANDROID_API__ >= 26
+    qInfo() << "Attempting Mesa direct rendering setup...";
+    
+    // Get LorieBuffer description to access AHardwareBuffer
+    const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
+    if (!desc) {
+        qDebug() << "No buffer description available";
+        return false;
+    }
+    
+    // Check if this is an AHardwareBuffer type
+    if (desc->type != LORIEBUFFER_AHARDWAREBUFFER) {
+        qDebug() << "LorieBuffer is not AHardwareBuffer type, got type:" << desc->type;
+        return false;
+    }
+    
+    // Get the AHardwareBuffer
+    AHardwareBuffer *ahb = desc->buffer;
+    if (!ahb) {
+        qDebug() << "LorieBuffer description has no AHardwareBuffer";
+        return false;
+    }
+    
+    EGLDisplay display = eglGetCurrentDisplay();
+    if (display == EGL_NO_DISPLAY) {
+        qDebug() << "No current EGL display";
+        return false;
+    }
+    
+    // Check for required EGL extensions
+    const char *extensions = eglQueryString(display, EGL_EXTENSIONS);
+    if (!extensions) {
+        qDebug() << "Failed to query EGL extensions";
+        return false;
+    }
+    
+    bool hasNativeBufferAndroid = strstr(extensions, "EGL_ANDROID_image_native_buffer") != nullptr;
+    bool hasImageKHR = strstr(extensions, "EGL_KHR_image") != nullptr || 
+                       strstr(extensions, "EGL_KHR_image_base") != nullptr;
+    
+    if (!hasNativeBufferAndroid || !hasImageKHR) {
+        qDebug() << "Required EGL extensions not available:";
+        qDebug() << "  EGL_ANDROID_image_native_buffer:" << hasNativeBufferAndroid;
+        qDebug() << "  EGL_KHR_image:" << hasImageKHR;
+        return false;
+    }
+    
+    // Create EGLImage from AHardwareBuffer
+    EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(ahb);
+    if (!clientBuffer) {
+        qDebug() << "Failed to get native client buffer from AHardwareBuffer";
+        return false;
+    }
+    
+    EGLint imageAttribs[] = {
+        EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
+        EGL_NONE
+    };
+    
+    m_eglImage = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, 
+                                   clientBuffer, imageAttribs);
+    
+    if (m_eglImage == EGL_NO_IMAGE_KHR) {
+        EGLint error = eglGetError();
+        qDebug() << "Failed to create EGLImage from AHardwareBuffer, error:" << Qt::hex << error;
+        return false;
+    }
+    
+    // Create and bind texture from EGLImage
+    glGenTextures(1, &m_texture);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_eglImage);
+    
+    // Create framebuffer and attach texture
+    glGenFramebuffers(1, &m_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0);
+    
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        qDebug() << "Framebuffer not complete:" << Qt::hex << status;
+        cleanupDirectRendering();
+        return false;
+    }
+    
+    qInfo() << "Mesa direct rendering to AHardwareBuffer setup successful";
+    qInfo() << "Buffer size:" << desc->width << "x" << desc->height << "format:" << desc->format;
+    
+    return true;
+    
+#else
+    qDebug() << "AHardwareBuffer requires Android API >= 26";
+    return false;
+#endif
+}
+
+void AndroidEglLayer::cleanupDirectRendering()
+{
+    if (m_eglImage != EGL_NO_IMAGE_KHR) {
+        EGLDisplay display = eglGetCurrentDisplay();
+        if (display != EGL_NO_DISPLAY) {
+            eglDestroyImageKHR(display, m_eglImage);
+        }
+        m_eglImage = EGL_NO_IMAGE_KHR;
+    }
+}
+
 void AndroidEglLayer::cleanup()
 {
+    // Clean up direct rendering resources
+    cleanupDirectRendering();
+    
     if (m_framebuffer) {
         glDeleteFramebuffers(1, &m_framebuffer);
         m_framebuffer = 0;
@@ -206,6 +394,7 @@ void AndroidEglLayer::cleanup()
     
     // Don't release the buffer - it's a global shared resource
     m_buffer = nullptr;
+    m_useDirectRendering = false;
     
     m_fbo.reset();
 }
@@ -277,7 +466,12 @@ void AndroidEglBackend::init()
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Initializing EGL for software rendering";
+    qInfo() << "Initializing Android EGL backend with Mesa software rendering";
+    
+    // Set Mesa environment for software rendering
+    setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
+    setenv("GALLIUM_DRIVER", "llvmpipe", 1);
+    setenv("MESA_GL_VERSION_OVERRIDE", "3.0", 1);
     
     // Get EGL display - use default display for software rendering
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -291,10 +485,11 @@ bool AndroidEglBackend::initializeEgl()
     if (!eglInitialize(display, &major, &minor)) {
         EGLint error = eglGetError();
         qCritical() << "eglInitialize failed:" << Qt::hex << error;
+        qCritical() << "Mesa software rendering may not be available";
         return false;
     }
     
-    qInfo() << "EGL initialized - version:" << major << "." << minor;
+    qInfo() << "EGL initialized with Mesa - version:" << major << "." << minor;
     
     // Bind OpenGL ES API
     if (!eglBindAPI(EGL_OPENGL_ES_API)) {
@@ -310,6 +505,9 @@ bool AndroidEglBackend::initializeEgl()
     }
     
     setEglDisplay(eglDisplay.release());
+    
+    // Only create real EGL context for Mesa software rendering mode
+    // (VirtualGL mode already returned above)
     
     // Choose EGL config
     const EGLint configAttribs[] = {
@@ -362,7 +560,7 @@ bool AndroidEglBackend::initializeEgl()
         return false;
     }
     
-    qInfo() << "EGL context created and made current";
+    qInfo() << "Mesa EGL context created and made current";
     
     // Log OpenGL information
     qInfo() << "OpenGL Vendor:" << (const char*)glGetString(GL_VENDOR);

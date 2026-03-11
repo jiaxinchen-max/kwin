@@ -53,6 +53,10 @@ public:
     // Setup render target using termux-render buffer
     bool setupRenderTarget();
     void cleanup();
+    
+    // Mesa direct rendering support
+    bool trySetupDirectRendering();
+    void cleanupDirectRendering();
 
 private:
     AndroidEglBackend *const m_backend;
@@ -63,6 +67,10 @@ private:
     Buffer *m_buffer = nullptr;
     GLuint m_texture = 0;
     GLuint m_framebuffer = 0;
+    
+    // Mesa AHardwareBuffer integration
+    EGLImageKHR m_eglImage = EGL_NO_IMAGE_KHR;
+    bool m_useDirectRendering = false;
     
     int m_width = 0;
     int m_height = 0;

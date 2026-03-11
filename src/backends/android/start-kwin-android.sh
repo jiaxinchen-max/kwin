@@ -31,11 +31,57 @@ export QT_XCB_GL_INTEGRATION=none
 # Check dependencies
 echo "Checking dependencies..."
 
-if [ ! -f "$PREFIX/lib/libtermux-render.so" ]; then
+# Find termux-render library
+TERMUX_RENDER_LIB=""
+for lib in "libtermux-render.so" "termux-render.so" "librender.so"; do
+    if [ -f "$PREFIX/lib/$lib" ]; then
+        TERMUX_RENDER_LIB="$PREFIX/lib/$lib"
+        echo "Found termux-render: $TERMUX_RENDER_LIB"
+        break
+    fi
+done
+
+if [ -z "$TERMUX_RENDER_LIB" ]; then
     echo "Error: termux-display-client library not found"
     echo "Please install termux-display-client first"
     exit 1
 fi
+
+# Check for VirtualGL libraries
+VGL_CLIENT_LIB=""
+EGL_INTERCEPT_LIB=""
+
+for lib_path in "$PREFIX/lib"; do
+    if [ -f "$lib_path/libvirtualgl-client.so" ]; then
+        VGL_CLIENT_LIB="$lib_path/libvirtualgl-client.so"
+        echo "Found VirtualGL client: $VGL_CLIENT_LIB"
+    fi
+    if [ -f "$lib_path/libegl-intercept.so" ]; then
+        EGL_INTERCEPT_LIB="$lib_path/libegl-intercept.so"
+        echo "Found EGL intercept: $EGL_INTERCEPT_LIB"
+    fi
+done
+
+# Set up library preloading
+PRELOAD_LIBS="$TERMUX_RENDER_LIB"
+
+if [ -n "$EGL_INTERCEPT_LIB" ] && [ -n "$VGL_CLIENT_LIB" ]; then
+    echo "✓ VirtualGL libraries found - enabling hardware acceleration"
+    PRELOAD_LIBS="$EGL_INTERCEPT_LIB:$VGL_CLIENT_LIB:$PRELOAD_LIBS"
+    export VGL_DEBUG=1
+    
+    # Check if VirtualGL server is running
+    if [ -S "/data/data/com.termux/files/usr/tmp/virtualgl-0" ]; then
+        echo "✓ VirtualGL server detected - hardware acceleration enabled"
+    else
+        echo "⚠ VirtualGL server not detected - make sure termux-app is running"
+    fi
+else
+    echo "⚠ VirtualGL libraries not found - using software rendering"
+fi
+
+export LD_PRELOAD="$PRELOAD_LIBS:${LD_PRELOAD}"
+echo "LD_PRELOAD: $LD_PRELOAD"
 
 if [ ! -f "$PREFIX/bin/kwin_wayland" ]; then
     echo "Error: KWin not found"
