@@ -10,7 +10,9 @@
 #include "android_backend.h"
 #include "android_output.h"
 #include "core/graphicsbuffer.h"
+#include "core/region.h"
 #include "core/renderbackend.h"
+#include "core/rendertarget.h"
 #include "opengl/egldisplay.h"
 #include "opengl/eglcontext.h"
 #include "opengl/glframebuffer.h"
@@ -117,6 +119,12 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
         glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         glViewport(0, 0, m_width, m_height);
         qDebug() << "Using direct rendering to AHardwareBuffer";
+        
+        // Create a GLFramebuffer wrapper for the AHardwareBuffer framebuffer
+        // This allows KWin to use the AHardwareBuffer framebuffer with existing rendering code
+        if (!m_fbo) {
+            m_fbo = std::make_unique<GLFramebuffer>(m_framebuffer, QSize(m_width, m_height));
+        }
     } else if (!m_fbo) {
         qCritical() << "No framebuffer available";
         return std::nullopt;
@@ -124,19 +132,10 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
     
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     
-    if (m_useDirectRendering) {
-        // Create a temporary GLFramebuffer wrapper for the AHardwareBuffer framebuffer
-        // This allows KWin to render directly to the shared buffer
-        return OutputLayerBeginFrameInfo{
-            .renderTarget = RenderTarget(QSize(m_width, m_height), 1.0),
-            .repaint = Region::infinite(),
-        };
-    } else {
-        return OutputLayerBeginFrameInfo{
-            .renderTarget = RenderTarget(m_fbo.get()),
-            .repaint = Region::infinite(),
-        };
-    }
+    return OutputLayerBeginFrameInfo{
+        .renderTarget = RenderTarget(m_fbo.get()),
+        .repaint = Region(0, 0, m_width, m_height),
+    };
 }
 
 bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame)
