@@ -123,7 +123,9 @@ else
 fi
 
 # 设置库预加载
-export LD_PRELOAD="$TERMUX_RENDER_LIB:$LD_PRELOAD"
+if [ "${KWIN_ANDROID_PRELOAD_RENDER:-0}" = "1" ]; then
+    export LD_PRELOAD="$TERMUX_RENDER_LIB:$LD_PRELOAD"
+fi
 
 # 性能调优
 export QSG_RENDER_LOOP=basic
@@ -133,7 +135,7 @@ echo ""
 echo "Environment setup complete:"
 echo "  Acceleration: $ACCELERATION_MODE"
 echo "  Mesa driver: ${MESA_LOADER_DRIVER_OVERRIDE:-default}"
-echo "  LD_PRELOAD: $LD_PRELOAD"
+echo "  LD_PRELOAD: ${LD_PRELOAD:-}"
 echo ""
 
 # 启动D-Bus

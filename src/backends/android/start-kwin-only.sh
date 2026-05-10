@@ -14,11 +14,13 @@ fi
 # 环境变量设置
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 export XDG_RUNTIME_DIR="$PREFIX/tmp/runtime-$(id -u)"
-export WAYLAND_DISPLAY="wayland-0"
+export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
+unset WAYLAND_DISPLAY
 export XDG_CURRENT_DESKTOP="KDE"
 export XDG_SESSION_TYPE="wayland"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
+export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-1}"
 mkdir -p "$XDG_RUNTIME_DIR"
 
 echo "Checking dependencies..."
@@ -99,7 +101,9 @@ else
     ACCELERATION_MODE="Basic Software"
 fi
 
-export LD_PRELOAD="$TERMUX_RENDER_LIB:$LD_PRELOAD"
+if [ "${KWIN_ANDROID_PRELOAD_RENDER:-0}" = "1" ]; then
+    export LD_PRELOAD="$TERMUX_RENDER_LIB:$LD_PRELOAD"
+fi
 
 # 查找KWin
 KWIN_BINARY=""
@@ -130,12 +134,15 @@ echo ""
 echo "Starting KWin Wayland compositor..."
 echo "Acceleration: $ACCELERATION_MODE"
 echo "AHardwareBuffer zero-copy: supported"
-echo "WAYLAND_DISPLAY: $WAYLAND_DISPLAY"
+echo "WAYLAND_DISPLAY: $KWIN_WAYLAND_SOCKET"
+echo "termux-render socket: $PREFIX/tmp/wayland-0"
+echo "Android input: $([ "$KWIN_ANDROID_DISABLE_INPUT" = "1" ] && echo disabled || echo enabled)"
+echo "Connect-only: $([ "${KWIN_ANDROID_CONNECT_ONLY:-0}" = "1" ] && echo enabled || echo disabled)"
 echo ""
 
 # 启动KWin
 exec "$KWIN_BINARY" \
+    --socket "$KWIN_WAYLAND_SOCKET" \
     --no-kactivities \
     --no-global-shortcuts \
-    --replace \
     "$@"

@@ -589,11 +589,6 @@ int main(int argc, char *argv[])
         a.setSupportsGlobalShortcuts(false);
     }
 
-    if (backendType == BackendType::Android && !a.outputBackend()->initialize()) {
-        std::cerr << "FATAL ERROR: could not initialize Android backend" << std::endl;
-        return 1;
-    }
-
     QString socketName = parser.value(waylandSocketOption);
     if (backendType == BackendType::Android && socketName.isEmpty()) {
         socketName = qEnvironmentVariable("KWIN_WAYLAND_SOCKET");
