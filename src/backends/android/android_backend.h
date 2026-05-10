@@ -88,6 +88,8 @@ private:
     
     // Output
     AndroidOutput *m_output = nullptr;
+    bool m_initialized = false;
+    bool m_inputEnabled = true;
     
     // Input handling
     QSocketNotifier *m_inputNotifier = nullptr;
@@ -97,9 +99,9 @@ private:
     AndroidInputDevice *m_pointerDevice = nullptr;
     
     // Configuration
-    int m_width = 1920;
-    int m_height = 1080;
-    int m_refreshRate = 60;
+    int m_width = 1080;
+    int m_height = 720;
+    int m_refreshRate = 10;
 };
 
 /**

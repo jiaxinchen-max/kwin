@@ -22,11 +22,13 @@ fi
 # 环境变量设置
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 export XDG_RUNTIME_DIR="$PREFIX/tmp/runtime-$(id -u)"
-export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
+unset WAYLAND_DISPLAY
 export XDG_CURRENT_DESKTOP="KDE"
 export XDG_SESSION_TYPE="wayland"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
+export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-1}"
 export PATH="../../../build/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR"
 
@@ -141,11 +143,12 @@ eval $(dbus-launch --sh-syntax) &
 # 启动KWin Wayland
 echo "Starting KWin with hardware acceleration..."
 kwin_wayland \
-    --socket "$WAYLAND_DISPLAY" \
+    --socket "$KWIN_WAYLAND_SOCKET" \
     --xwayland \
     --no-kactivities \
     --no-global-shortcuts &
 sleep 3
+export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
 
 # 启动Plasma组件
 echo "Starting Plasma components..."

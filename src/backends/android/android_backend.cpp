@@ -77,6 +77,10 @@ AndroidBackend::~AndroidBackend()
 
 bool AndroidBackend::initialize()
 {
+    if (m_initialized) {
+        return true;
+    }
+
     qInfo() << "Initializing Android Backend";
     
     // Connect to termux-app display server
@@ -87,6 +91,14 @@ bool AndroidBackend::initialize()
     
     // Create output
     createOutput();
+
+    m_inputEnabled = qEnvironmentVariableIntValue("KWIN_ANDROID_DISABLE_INPUT") != 1;
+    if (!m_inputEnabled) {
+        qInfo() << "Android input disabled";
+        qInfo() << "Android Backend initialized successfully";
+        m_initialized = true;
+        return true;
+    }
     
     // Initialize input devices
     m_touchDevice = new AndroidInputDevice(AndroidInputDevice::Type::Touch, this);
@@ -100,23 +112,48 @@ bool AndroidBackend::initialize()
     }
     
     qInfo() << "Android Backend initialized successfully";
+    m_initialized = true;
     return true;
 }
 
 bool AndroidBackend::connectToDisplayServer()
 {
     qDebug() << "Connecting to termux display server...";
+
+    bool ok = false;
+    const int width = qEnvironmentVariableIntValue("KWIN_ANDROID_WIDTH", &ok);
+    if (ok && width > 0) {
+        m_width = width;
+    }
+    const int height = qEnvironmentVariableIntValue("KWIN_ANDROID_HEIGHT", &ok);
+    if (ok && height > 0) {
+        m_height = height;
+    }
+    const int refreshRate = qEnvironmentVariableIntValue("KWIN_ANDROID_REFRESH_RATE", &ok);
+    if (ok && refreshRate > 0) {
+        m_refreshRate = refreshRate;
+    }
     
     // Set screen configuration
     setScreenConfig(m_width, m_height, m_refreshRate);
-    setExitCallback(handleRenderServerStopped);
-    
+
+    const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
+    const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");
+    qunsetenv("WAYLAND_DISPLAY");
+
     // Connect using termux-wayland library
     if (connectToRender() != 0) {
+        if (hadWaylandDisplay) {
+            qputenv("WAYLAND_DISPLAY", waylandDisplay);
+        }
         qCritical() << "connectToRender() failed";
         stopEventLoop();
         return false;
     }
+    if (hadWaylandDisplay) {
+        qputenv("WAYLAND_DISPLAY", waylandDisplay);
+    }
+    setExitCallback(handleRenderServerStopped);
     
     // Get shared resources from termux-wayland library
     m_lorieBuffer = get_lorieBuffer();
@@ -158,6 +195,9 @@ void AndroidBackend::createOutput()
 
 std::unique_ptr<InputBackend> AndroidBackend::createInputBackend()
 {
+    if (!m_inputEnabled) {
+        return nullptr;
+    }
     return std::make_unique<AndroidInputBackend>(this);
 }
 
@@ -332,9 +372,15 @@ AndroidInputBackend::~AndroidInputBackend()
 void AndroidInputBackend::initialize()
 {
     // Input devices are created by AndroidBackend
-    Q_EMIT deviceAdded(m_backend->touchDevice());
-    Q_EMIT deviceAdded(m_backend->keyboardDevice());
-    Q_EMIT deviceAdded(m_backend->pointerDevice());
+    if (m_backend->touchDevice()) {
+        Q_EMIT deviceAdded(m_backend->touchDevice());
+    }
+    if (m_backend->keyboardDevice()) {
+        Q_EMIT deviceAdded(m_backend->keyboardDevice());
+    }
+    if (m_backend->pointerDevice()) {
+        Q_EMIT deviceAdded(m_backend->pointerDevice());
+    }
 }
 
 // AndroidInputDevice implementation
