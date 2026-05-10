@@ -11,6 +11,7 @@
 #include "core/inputbackend.h"
 #include "core/outputbackend.h"
 #include "core/inputdevice.h"
+#include <kwin_export.h>
 #include <QObject>
 #include <QSocketNotifier>
 
@@ -37,7 +38,7 @@ class AndroidInputDevice;
  * the termux-wayland protocol. It renders to an AHardwareBuffer
  * that is shared with the Android display application.
  */
-class AndroidBackend : public OutputBackend
+class KWIN_EXPORT AndroidBackend : public OutputBackend
 {
     Q_OBJECT
 
