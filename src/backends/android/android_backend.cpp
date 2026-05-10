@@ -14,6 +14,9 @@
 #include "input.h"
 
 #include <QSocketNotifier>
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <unistd.h>
 
@@ -29,6 +32,11 @@ namespace KWin
 {
 namespace Android
 {
+
+static void handleRenderServerStopped()
+{
+    qWarning("Termux render server stopped");
+}
 
 // Use the keycode conversion table from termux-render library
 // (defined in termux/render/render.h)
@@ -59,11 +67,11 @@ AndroidBackend::~AndroidBackend()
         delete m_output;
     }
     
-    if (m_socketFd >= 0) {
-        close(m_socketFd);
-    }
-    if (m_connFd >= 0) {
-        close(m_connFd);
+    if (m_lorieBuffer || m_serverState || m_connFd >= 0) {
+        stopEventLoop();
+        m_lorieBuffer = nullptr;
+        m_serverState = nullptr;
+        m_connFd = -1;
     }
 }
 
@@ -101,10 +109,12 @@ bool AndroidBackend::connectToDisplayServer()
     
     // Set screen configuration
     setScreenConfig(m_width, m_height, m_refreshRate);
+    setExitCallback(handleRenderServerStopped);
     
     // Connect using termux-wayland library
     if (connectToRender() != 0) {
         qCritical() << "connectToRender() failed";
+        stopEventLoop();
         return false;
     }
     
@@ -112,6 +122,13 @@ bool AndroidBackend::connectToDisplayServer()
     m_lorieBuffer = get_lorieBuffer();
     m_serverState = get_serverState();
     m_connFd = get_connFd();
+
+    if (m_connFd >= 0) {
+        const int flags = fcntl(m_connFd, F_GETFL, 0);
+        if (flags >= 0) {
+            fcntl(m_connFd, F_SETFL, flags | O_NONBLOCK);
+        }
+    }
     
     if (!m_lorieBuffer) {
         qCritical() << "Failed to get LorieBuffer";
@@ -207,8 +224,29 @@ QString AndroidBackend::supportInformation() const
 
 void AndroidBackend::handleInputEvents()
 {
-    lorieEvent e;
-    while (read(m_connFd, &e, sizeof(e)) == sizeof(e)) {
+    char buffer[sizeof(lorieEvent) * 16];
+    while (true) {
+        const ssize_t bytesRead = read(m_connFd, buffer, sizeof(buffer));
+        if (bytesRead > 0) {
+            m_inputBuffer.append(buffer, static_cast<qsizetype>(bytesRead));
+        } else if (bytesRead == 0) {
+            qWarning() << "Android input connection closed";
+            return;
+        } else if (errno == EINTR) {
+            continue;
+        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+        } else {
+            qWarning() << "Failed to read Android input event:" << strerror(errno);
+            return;
+        }
+    }
+
+    const qsizetype eventSize = static_cast<qsizetype>(sizeof(lorieEvent));
+    while (m_inputBuffer.size() >= eventSize) {
+        lorieEvent e = {};
+        std::memcpy(&e, m_inputBuffer.constData(), sizeof(e));
+        m_inputBuffer.remove(0, eventSize);
         processInputEvent(e);
     }
 }

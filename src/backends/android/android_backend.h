@@ -12,6 +12,7 @@
 #include "core/outputbackend.h"
 #include "core/inputdevice.h"
 #include <kwin_export.h>
+#include <QByteArray>
 #include <QObject>
 #include <QSocketNotifier>
 
@@ -90,6 +91,7 @@ private:
     
     // Input handling
     QSocketNotifier *m_inputNotifier = nullptr;
+    QByteArray m_inputBuffer;
     AndroidInputDevice *m_touchDevice = nullptr;
     AndroidInputDevice *m_keyboardDevice = nullptr;
     AndroidInputDevice *m_pointerDevice = nullptr;

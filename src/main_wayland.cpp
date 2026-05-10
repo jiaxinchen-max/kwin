@@ -589,7 +589,13 @@ int main(int argc, char *argv[])
         a.setSupportsGlobalShortcuts(false);
     }
 
-    const QString socketName = parser.value(waylandSocketOption);
+    QString socketName = parser.value(waylandSocketOption);
+    if (backendType == BackendType::Android && socketName.isEmpty()) {
+        socketName = qEnvironmentVariable("KWIN_WAYLAND_SOCKET");
+        if (socketName.isEmpty()) {
+            socketName = QStringLiteral("wayland-1");
+        }
+    }
     if (parser.isSet(waylandSocketFdOption)) {
         bool ok;
         int fd = parser.value(waylandSocketFdOption).toInt(&ok);
