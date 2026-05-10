@@ -10,6 +10,7 @@
 
 #include "config-kwin.h"
 
+#include "backends/android/android_backend.h"
 #include "backends/drm/drm_backend.h"
 #include "backends/virtual/virtual_backend.h"
 #include "backends/wayland/wayland_backend.h"
@@ -358,6 +359,7 @@ int main(int argc, char *argv[])
     QCommandLineOption replaceOption(QStringLiteral("replace"),
                                      i18n("Exits this instance so it can be restarted by kwin_wayland_wrapper."));
 
+    QCommandLineOption androidOption(QStringLiteral("android"), i18n("Render through the Android Termux backend."));
     QCommandLineOption drmOption(QStringLiteral("drm"), i18n("Render through drm node."));
     QCommandLineOption locale1Option(QStringLiteral("locale1"), i18n("Extract locale information from locale1 rather than the user's configuration"));
 
@@ -375,6 +377,7 @@ int main(int argc, char *argv[])
 #if KWIN_BUILD_X11
     parser.addOption(x11DisplayOption);
 #endif
+    parser.addOption(androidOption);
     parser.addOption(waylandDisplayOption);
     parser.addOption(virtualFbOption);
     parser.addOption(widthOption);
@@ -440,6 +443,7 @@ int main(int argc, char *argv[])
     }
 
     enum class BackendType {
+        Android,
         Kms,
 #if KWIN_BUILD_X11
         X11,
@@ -454,15 +458,19 @@ int main(int argc, char *argv[])
     qreal outputScale = 1;
 
     // Decide what backend to use.
-    if (parser.isSet(drmOption)) {
+    const QByteArray requestedBackend = qgetenv("KWIN_BACKEND").toLower();
+    if (parser.isSet(androidOption) || requestedBackend == "android") {
+        qInfo("Using Android backend");
+        backendType = BackendType::Android;
+    } else if (parser.isSet(drmOption) || requestedBackend == "drm" || requestedBackend == "kms") {
         backendType = BackendType::Kms;
 #if KWIN_BUILD_X11
-    } else if (parser.isSet(x11DisplayOption)) {
+    } else if (parser.isSet(x11DisplayOption) || requestedBackend == "x11") {
         backendType = BackendType::X11;
 #endif
-    } else if (parser.isSet(waylandDisplayOption)) {
+    } else if (parser.isSet(waylandDisplayOption) || requestedBackend == "wayland") {
         backendType = BackendType::Wayland;
-    } else if (parser.isSet(virtualFbOption)) {
+    } else if (parser.isSet(virtualFbOption) || requestedBackend == "virtual") {
         backendType = BackendType::Virtual;
     } else {
         if (qEnvironmentVariableIsSet("WAYLAND_DISPLAY")) {
@@ -512,6 +520,10 @@ int main(int argc, char *argv[])
     }
 
     switch (backendType) {
+    case BackendType::Android:
+        a.setSession(KWin::Session::create(KWin::Session::Type::Noop));
+        a.setOutputBackend(std::make_unique<KWin::Android::AndroidBackend>());
+        break;
     case BackendType::Kms:
         a.setSession(KWin::Session::create());
         if (!a.session()) {

@@ -8,6 +8,8 @@
 
 #include "config-kwin.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <pthread.h>
 #include <sched.h>
 
@@ -17,6 +19,11 @@ namespace KWin
 void gainRealTime()
 {
 #if HAVE_SCHED_RESET_ON_FORK
+    const char *prefix = std::getenv("PREFIX");
+    if (prefix && std::strcmp(prefix, "/data/data/com.termux/files/usr") == 0) {
+        return;
+    }
+
     const int minPriority = sched_get_priority_min(SCHED_RR);
     sched_param sp;
     sp.sched_priority = minPriority;
