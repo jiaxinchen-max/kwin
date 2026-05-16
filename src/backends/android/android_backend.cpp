@@ -21,12 +21,7 @@
 #include <unistd.h>
 
 // termux-render library headers
-#include <termux/render/render.h>  // for connectToRender, get_connFd, android_to_linux_keycode, etc.
-
-// External symbol from termux-render library
-extern "C" {
-    extern int android_to_linux_keycode[304];
-}
+#include <termux/render/render.h> // for connectToRender, get_connFd, android_to_linux_keycode, etc.
 
 namespace KWin
 {
@@ -38,8 +33,7 @@ static void handleRenderServerStopped()
     qWarning("Termux render server stopped");
 }
 
-// Use the keycode conversion table from termux-render library
-// (defined in termux/render/render.h)
+// Use the keycode conversion table from termux/render/render.h.
 
 AndroidBackend::AndroidBackend(QObject *parent)
     : OutputBackend(parent)
@@ -343,8 +337,8 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         const auto &key = e.key;
         int linuxKeycode = key.key;
         
-        // Convert Android keycode to Linux keycode if needed
-        // Use the android_to_linux_keycode array from termux-render library
+        // Convert Android keycode to Linux keycode if needed.
+        // android_to_linux_keycode is a static table from termux/render/render.h.
         if (key.key < 304 && android_to_linux_keycode[key.key] != 0) {
             linuxKeycode = android_to_linux_keycode[key.key];
         }
