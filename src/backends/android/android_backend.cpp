@@ -21,7 +21,7 @@
 #include <unistd.h>
 
 // termux-render library headers
-#include <termux/render/render.h> // for connectToRender, get_connFd, android_to_linux_keycode, etc.
+#include <termux/render/render.h> // for connectToRender, get_conn_fd, android_to_linux_keycode, etc.
 
 namespace KWin
 {
@@ -152,7 +152,7 @@ bool AndroidBackend::connectToDisplayServer()
     // Get shared resources from termux-wayland library
     m_lorieBuffer = get_lorieBuffer();
     m_serverState = get_serverState();
-    m_connFd = get_connFd();
+    m_connFd = get_conn_fd();
 
     if (m_connFd >= 0) {
         const int flags = fcntl(m_connFd, F_GETFL, 0);
