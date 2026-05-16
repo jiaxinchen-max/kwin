@@ -16,9 +16,12 @@
 #include <QObject>
 #include <QSocketNotifier>
 
-// Include termux-render headers for complete type definitions
+// Include termux-render headers for complete type definitions.
+// The installed headers are C headers and may not provide C++ linkage guards.
+extern "C" {
 #include <termux/render/render.h>
 #include <termux/render/buffer.h>
+}
 
 // Forward declarations for termux-wayland library
 struct LorieBuffer;

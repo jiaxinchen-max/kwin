@@ -13,8 +13,11 @@
 #include "core/session.h"
 #include "utils/udev.h"
 
-// Always include for Termux builds (don't rely on __ANDROID__ macro)
-#include <termux/render/render.h>  // from termux-display-client
+// Always include for Termux builds (don't rely on __ANDROID__ macro).
+// The installed termux-render headers are C headers and may not provide C++ linkage guards.
+extern "C" {
+#include <termux/render/render.h>
+}
 
 #include <fcntl.h>
 #include <unistd.h>

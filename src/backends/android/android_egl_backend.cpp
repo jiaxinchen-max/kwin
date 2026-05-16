@@ -35,10 +35,6 @@
 #endif
 #include <termux/render/tlog.h>
 
-// External functions from termux-render library
-extern LorieBuffer* get_lorieBuffer();
-extern struct lorie_shared_server_state* get_serverState();
-
 // Define Buffer type properly
 struct Buffer_Desc {
     int width;
