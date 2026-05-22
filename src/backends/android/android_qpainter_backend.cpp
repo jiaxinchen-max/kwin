@@ -14,11 +14,6 @@
 #include <drm_fourcc.h>
 #include <QDebug>
 
-// Include termux-render headers
-#include <termux/render/buffer.h>
-#include <termux/render/render.h>
-#include <termux/render/tlog.h>
-
 // Define Buffer type properly
 struct Buffer_Desc {
     int width;

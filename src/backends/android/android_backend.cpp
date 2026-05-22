@@ -20,9 +20,6 @@
 #include <linux/input-event-codes.h>
 #include <unistd.h>
 
-// termux-render library headers
-#include <termux/render/render.h> // for connectToRender, get_conn_fd, android_to_linux_keycode, etc.
-
 namespace KWin
 {
 namespace Android

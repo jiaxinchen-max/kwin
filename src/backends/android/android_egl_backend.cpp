@@ -25,15 +25,10 @@
 #include <unistd.h>
 #include <cstdlib>
 
-// Include termux-render headers
-#include <termux/render/buffer.h>
-#include <termux/render/render.h>
-
 // LorieBuffer constants from buffer.h
 #ifndef LORIEBUFFER_AHARDWAREBUFFER
 #define LORIEBUFFER_AHARDWAREBUFFER 3
 #endif
-#include <termux/render/tlog.h>
 
 // Define Buffer type properly
 struct Buffer_Desc {

@@ -16,8 +16,6 @@
 #include <QImage>
 #include <algorithm>
 #include <cstring>
-#include <termux/render/render.h>  // for lorie_mutex_lock/unlock
-#include <termux/render/buffer.h>  // for LorieBuffer_description
 
 namespace KWin
 {
