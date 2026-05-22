@@ -13,7 +13,8 @@ fi
 
 # 环境变量设置
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
-export XDG_RUNTIME_DIR="$PREFIX/tmp/runtime-$(id -u)"
+export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
 TERMUX_RENDER_SOCKET_DIR="/data/data/com.termux/files/home/tmp"
 TERMUX_RENDER_SOCKET="$TERMUX_RENDER_SOCKET_DIR/wayland-0"
 export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
@@ -23,7 +24,8 @@ export XDG_SESSION_TYPE="wayland"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
-mkdir -p "$XDG_RUNTIME_DIR"
+mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
+chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
 mkdir -p "$TERMUX_RENDER_SOCKET_DIR"
 
 echo "Checking dependencies..."
@@ -75,7 +77,7 @@ elif [ $VIRGL_AVAILABLE -eq 1 ]; then
     export MESA_LOADER_DRIVER_OVERRIDE=virpipe
     export GALLIUM_DRIVER=virgl
     export VIRGL_VTEST=1
-    export VIRGL_VTEST_SOCKET_NAME=/tmp/virgl_test
+    export VIRGL_VTEST_SOCKET_NAME="$TMPDIR/virgl_test"
     
     virgl_test_server --use-egl-surfaceless --use-gles &
     VIRGL_PID=$!

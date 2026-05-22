@@ -43,7 +43,8 @@ fi
 
 # 环境变量设置
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
-export XDG_RUNTIME_DIR="$PREFIX/tmp/runtime-$(id -u)"
+export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
 export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
 unset WAYLAND_DISPLAY
 export XDG_CURRENT_DESKTOP="KDE"
@@ -55,8 +56,8 @@ export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
 export PATH="../../../build/bin:$PATH"
-mkdir -p "$XDG_RUNTIME_DIR"
-mkdir -p /tmp/.X11-unix 2>/dev/null || true
+mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
+chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
 
 find_kactivitymanagerd() {
     local candidate
@@ -166,7 +167,7 @@ elif [ $VIRGL_AVAILABLE -eq 1 ] && [ $MESA_VIRGL_AVAILABLE -eq 1 ]; then
     export MESA_LOADER_DRIVER_OVERRIDE=virpipe
     export GALLIUM_DRIVER=virgl
     export VIRGL_VTEST=1
-    export VIRGL_VTEST_SOCKET_NAME=/tmp/virgl_test
+    export VIRGL_VTEST_SOCKET_NAME="$TMPDIR/virgl_test"
     
     # 启动VirGL服务器
     virgl_test_server --use-egl-surfaceless --use-gles &
