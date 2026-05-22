@@ -77,6 +77,9 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
             if (ret != 0 || !sharedBuffer) {
                 qWarning() << "Failed to lock Android LorieBuffer in present()" << ret;
+                if (ret == 0) {
+                    LorieBuffer_unlock(buffer);
+                }
                 lorie_mutex_unlock(&state->lock, &state->lockingPid);
                 return false;
             }

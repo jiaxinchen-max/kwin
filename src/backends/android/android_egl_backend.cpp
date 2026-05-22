@@ -142,7 +142,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     if (m_useDirectRendering) {
         // Direct rendering mode - Mesa renders directly to AHardwareBuffer
         // No pixel copy needed, just signal frame completion
-        struct lorie_shared_server_state *serverState = get_serverState();
+        struct lorie_shared_server_state *serverState = m_backend->androidBackend()->serverState();
         if (serverState) {
             lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
             serverState->waitForNextFrame = false;
@@ -160,7 +160,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     {
         if (m_buffer && m_framebuffer) {
             // Get server state for locking
-            struct lorie_shared_server_state *serverState = get_serverState();
+            struct lorie_shared_server_state *serverState = m_backend->androidBackend()->serverState();
             if (!serverState) {
                 qCritical() << "Failed to get server state";
                 return true;
@@ -215,9 +215,9 @@ bool AndroidEglLayer::setupRenderTarget()
     m_height = nativeSize.height();
     
     // Get the global termux-render buffer (initialized by connectToRender)
-    m_buffer = (Buffer*)get_lorieBuffer();
+    m_buffer = reinterpret_cast<Buffer *>(m_backend->androidBackend()->lorieBuffer());
     if (!m_buffer) {
-        qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
+        qCritical() << "Failed to get Android render buffer";
         return false;
     }
     

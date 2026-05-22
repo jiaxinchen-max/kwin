@@ -64,9 +64,9 @@ std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
 
     // Get the global termux-render buffer (initialized by connectToRender)
     if (!m_buffer) {
-        m_buffer = (Buffer*)get_lorieBuffer();
+        m_buffer = reinterpret_cast<Buffer *>(m_backend->androidBackend()->lorieBuffer());
         if (!m_buffer) {
-            qCritical() << "Failed to get termux-render buffer - is connectToRender() called?";
+            qCritical() << "Failed to get Android render buffer";
             return std::nullopt;
         }
     }
@@ -83,61 +83,7 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
 {
     m_renderTime->end();
     frame->addRenderTimeQuery(std::move(m_renderTime));
-    
-    // Copy the rendered image to the termux-render buffer
-    if (m_buffer && !m_image.isNull()) {
-        QImage *sourceImage = &m_image;
-        if (sourceImage && !sourceImage->isNull()) {
-            // Get server state for locking
-            struct lorie_shared_server_state *serverState = get_serverState();
-            if (!serverState) {
-                qCritical() << "Failed to get server state";
-                return true;
-            }
-            
-            // Lock the shared buffer
-            void *shared_buffer;
-            lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
-            int ret = LorieBuffer_lock((LorieBuffer*)m_buffer, &shared_buffer);
-            if (ret != 0) {
-                qCritical() << "Failed to lock LorieBuffer";
-                lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
-                return true;
-            }
-            
-            // Get buffer description
-            const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
-            if (desc && shared_buffer) {
-                // Convert QImage to the buffer format
-                QImage convertedImage = sourceImage->convertToFormat(QImage::Format_ARGB32);
-                
-                // Copy image data to shared buffer
-                const int bytesPerLine = desc->width * 4; // ARGB32 = 4 bytes per pixel
-                const int imageBytesPerLine = convertedImage.bytesPerLine();
-                const int copyBytesPerLine = qMin(bytesPerLine, imageBytesPerLine);
-                
-                for (int y = 0; y < qMin(desc->height, convertedImage.height()); ++y) {
-                    memcpy(
-                        static_cast<char*>(shared_buffer) + y * bytesPerLine,
-                        convertedImage.constScanLine(y),
-                        copyBytesPerLine
-                    );
-                }
-                
-                // Signal that drawing is requested
-                serverState->waitForNextFrame = false;
-                serverState->drawRequested = 1;
-                pthread_cond_signal(&serverState->cond);
-                
-                qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
-            }
-            
-            // Unlock the buffer
-            LorieBuffer_unlock((LorieBuffer*)m_buffer);
-            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
-        }
-    }
-    
+
     return true;
 }
 
