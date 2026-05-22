@@ -86,14 +86,14 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
                 ? QImage::Format_ARGB32
                 : QImage::Format_RGBA8888;
             const QImage convertedImage = sourceImage->convertToFormat(targetFormat);
-            const int targetBytesPerLine = desc->stride * 4;
-            const int copyBytesPerLine = std::min(desc->width * 4, convertedImage.bytesPerLine());
+            const qsizetype targetBytesPerLine = qsizetype(desc->stride) * 4;
+            const qsizetype copyBytesPerLine = std::min(qsizetype(desc->width) * 4, convertedImage.bytesPerLine());
             const int copyHeight = std::min(desc->height, convertedImage.height());
 
             for (int y = 0; y < copyHeight; ++y) {
-                std::memcpy(static_cast<char *>(sharedBuffer) + y * targetBytesPerLine,
+                std::memcpy(static_cast<char *>(sharedBuffer) + qsizetype(y) * targetBytesPerLine,
                             convertedImage.constScanLine(y),
-                            copyBytesPerLine);
+                            size_t(copyBytesPerLine));
             }
 
             state->waitForNextFrame = false;
