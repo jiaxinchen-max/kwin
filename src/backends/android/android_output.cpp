@@ -8,9 +8,14 @@
 
 #include "android_output.h"
 #include "android_backend.h"
+#include "android_qpainter_backend.h"
 // termux_display_api.h removed - using termux/render/render.h directly
 #include "core/outputlayer.h"
 #include "core/renderloop.h"
+#include <QDebug>
+#include <QImage>
+#include <algorithm>
+#include <cstring>
 #include <termux/render/render.h>  // for lorie_mutex_lock/unlock
 #include <termux/render/buffer.h>  // for LorieBuffer_description
 
@@ -62,7 +67,48 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     Q_UNUSED(layersToUpdate)
     Q_UNUSED(frame)
     
-    // Signal the termux-app display server that a new frame is ready
+    if (auto layer = dynamic_cast<AndroidQPainterLayer *>(m_outputLayer)) {
+        QImage *sourceImage = layer->image();
+        LorieBuffer *buffer = m_backend->lorieBuffer();
+        lorie_shared_server_state *state = m_backend->serverState();
+        if (sourceImage && !sourceImage->isNull() && buffer && state) {
+            void *sharedBuffer = nullptr;
+            lorie_mutex_lock(&state->lock, &state->lockingPid);
+            const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
+            if (ret != 0 || !sharedBuffer) {
+                qWarning() << "Failed to lock Android LorieBuffer in present()" << ret;
+                lorie_mutex_unlock(&state->lock, &state->lockingPid);
+                return false;
+            }
+
+            const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
+            const QImage::Format targetFormat = desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM
+                ? QImage::Format_ARGB32
+                : QImage::Format_RGBA8888;
+            const QImage convertedImage = sourceImage->convertToFormat(targetFormat);
+            const int targetBytesPerLine = desc->stride * 4;
+            const int copyBytesPerLine = std::min(desc->width * 4, convertedImage.bytesPerLine());
+            const int copyHeight = std::min(desc->height, convertedImage.height());
+
+            for (int y = 0; y < copyHeight; ++y) {
+                std::memcpy(static_cast<char *>(sharedBuffer) + y * targetBytesPerLine,
+                            convertedImage.constScanLine(y),
+                            copyBytesPerLine);
+            }
+
+            state->waitForNextFrame = false;
+            state->drawRequested = 1;
+            pthread_cond_signal(&state->cond);
+
+            LorieBuffer_unlock(buffer);
+            lorie_mutex_unlock(&state->lock, &state->lockingPid);
+
+            qDebug() << "Presented Android QPainter frame" << desc->width << "x" << desc->height;
+            return true;
+        }
+    }
+
+    // Signal the termux-app display server even if no software layer image is available.
     lorie_shared_server_state *state = m_backend->serverState();
     if (state) {
         lorie_mutex_lock(&state->lock, &state->lockingPid);

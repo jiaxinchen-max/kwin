@@ -3,7 +3,29 @@
 
 set -e
 
+INSTALL_DEPS=0
+VERBOSE_LOG=0
+for arg in "$@"; do
+    case "$arg" in
+        --install-deps|-i)
+            INSTALL_DEPS=1
+            ;;
+        -verbose|--verbose)
+            VERBOSE_LOG=1
+            ;;
+    esac
+done
+
+PLASMA_LOG="${PLASMA_LOG:-$(pwd)/plasma.log}"
+: > "$PLASMA_LOG"
+if [ "$VERBOSE_LOG" = "1" ]; then
+    exec > >(tee -a "$PLASMA_LOG") 2>&1
+else
+    exec > "$PLASMA_LOG" 2>&1
+fi
+
 echo "=== Plasma Desktop with Hardware Accelerated KWin ==="
+echo "Logging to: $PLASMA_LOG"
 
 # 检查Termux环境
 if [ ! -d "/data/data/com.termux" ]; then
@@ -12,9 +34,9 @@ if [ ! -d "/data/data/com.termux" ]; then
 fi
 
 # 检查是否需要安装依赖
-if [ "$1" = "--install-deps" ] || [ "$1" = "-i" ]; then
+if [ "$INSTALL_DEPS" = "1" ]; then
     echo "Installing required packages..."
-    pkg install plasma-desktop konsole dolphin dbus mesa virglrenderer-android -y
+    pkg install plasma-desktop plasma-workspace kactivitymanagerd konsole dolphin dbus mesa virglrenderer-android -y
     echo "✓ Dependencies installed"
     echo ""
 fi
@@ -31,8 +53,45 @@ export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
+export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
 export PATH="../../../build/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR"
+mkdir -p /tmp/.X11-unix 2>/dev/null || true
+
+find_kactivitymanagerd() {
+    local candidate
+    for candidate in \
+        kactivitymanagerd \
+        kactivitymanagerd6 \
+        "$PREFIX/lib/libexec/kactivitymanagerd" \
+        "$PREFIX/libexec/kactivitymanagerd" \
+        "$PREFIX/lib/kf6/kactivitymanagerd" \
+        "$PREFIX/lib/qt6/libexec/kactivitymanagerd"; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            command -v "$candidate"
+            return 0
+        fi
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    local service exec_line
+    for service in \
+        "$PREFIX/share/dbus-1/services/org.kde.ActivityManager.service" \
+        "$PREFIX/share/dbus-1/services/org.kde.kactivitymanagerd.service"; do
+        if [ -f "$service" ]; then
+            exec_line="$(sed -n 's/^Exec=//p' "$service" | head -n 1)"
+            if [ -n "$exec_line" ]; then
+                echo "$exec_line"
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
 
 echo "Checking dependencies..."
 
@@ -48,6 +107,24 @@ done
 
 if [ -z "$TERMUX_RENDER_LIB" ]; then
     echo "✗ Error: termux-display-client library not found"
+    exit 1
+fi
+
+MISSING_COMMANDS=()
+for cmd in dbus-launch kwin_wayland plasmashell; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        MISSING_COMMANDS+=("$cmd")
+    fi
+done
+KACTIVITYMANAGERD_CMD="$(find_kactivitymanagerd || true)"
+if [ -z "$KACTIVITYMANAGERD_CMD" ]; then
+    MISSING_COMMANDS+=("kactivitymanagerd")
+fi
+
+if [ ${#MISSING_COMMANDS[@]} -gt 0 ]; then
+    echo "✗ Missing required commands: ${MISSING_COMMANDS[*]}"
+    echo "Install dependencies with:"
+    echo "  pkg install plasma-desktop plasma-workspace kactivitymanagerd dbus"
     exit 1
 fi
 
@@ -183,6 +260,20 @@ elif command -v kded5 >/dev/null 2>&1; then
     kded5 &
 else
     echo "⚠ kded not found, skipping"
+fi
+
+echo "Starting kactivitymanagerd: $KACTIVITYMANAGERD_CMD"
+if [ -x "$KACTIVITYMANAGERD_CMD" ]; then
+    "$KACTIVITYMANAGERD_CMD" &
+else
+    sh -c "$KACTIVITYMANAGERD_CMD" &
+fi
+KACTIVITYMANAGERD_PID=$!
+sleep 1
+if ! kill -0 "$KACTIVITYMANAGERD_PID" 2>/dev/null; then
+    echo "✗ Error: kactivitymanagerd exited during startup"
+    wait "$KACTIVITYMANAGERD_PID" || true
+    exit 1
 fi
 
 if command -v plasmashell >/dev/null 2>&1; then
