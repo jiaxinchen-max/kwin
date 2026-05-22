@@ -29,6 +29,8 @@ export XDG_SESSION_TYPE="wayland"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
+export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
+export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export PATH="../../../build/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR"
 
@@ -96,10 +98,7 @@ elif [ $VIRGL_AVAILABLE -eq 1 ] && [ $MESA_VIRGL_AVAILABLE -eq 1 ]; then
     
     if kill -0 $VIRGL_SERVER_PID 2>/dev/null; then
         echo "✓ VirGL test server started"
-        cleanup_virgl() {
-            kill $VIRGL_SERVER_PID 2>/dev/null || true
-        }
-        trap cleanup_virgl EXIT
+        trap 'kill "$VIRGL_SERVER_PID" 2>/dev/null || true' EXIT
         ACCELERATION_MODE="VirGL Hardware"
     else
         echo "✗ VirGL failed, using software"
@@ -139,8 +138,17 @@ echo "  LD_PRELOAD: ${LD_PRELOAD:-}"
 echo ""
 
 # 启动D-Bus
-echo "Starting D-Bus..."
-eval $(dbus-launch --sh-syntax) &
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    echo "Starting D-Bus..."
+    if command -v dbus-launch >/dev/null 2>&1; then
+        eval "$(dbus-launch --sh-syntax)"
+    else
+        echo "✗ Error: dbus-launch not found"
+        exit 1
+    fi
+else
+    echo "Using existing D-Bus session"
+fi
 
 # 启动KWin Wayland
 echo "Starting KWin with hardware acceleration..."
@@ -149,16 +157,47 @@ kwin_wayland \
     --xwayland \
     --no-kactivities \
     --no-global-shortcuts &
+KWIN_PID=$!
 sleep 3
+if ! kill -0 "$KWIN_PID" 2>/dev/null; then
+    echo "✗ Error: kwin_wayland exited during startup"
+    wait "$KWIN_PID" || true
+    exit 1
+fi
 export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
 
 # 启动Plasma组件
 echo "Starting Plasma components..."
-kdeinit5 &
+if command -v kdeinit6 >/dev/null 2>&1; then
+    kdeinit6 &
+elif command -v kdeinit5 >/dev/null 2>&1; then
+    kdeinit5 &
+else
+    echo "⚠ kdeinit not found, skipping"
+fi
 sleep 1
-plasmashell &
+
+if command -v kded6 >/dev/null 2>&1; then
+    kded6 &
+elif command -v kded5 >/dev/null 2>&1; then
+    kded5 &
+else
+    echo "⚠ kded not found, skipping"
+fi
+
+if command -v plasmashell >/dev/null 2>&1; then
+    plasmashell &
+    PLASMASHELL_PID=$!
+else
+    echo "✗ Error: plasmashell not found"
+    exit 1
+fi
 sleep 1
-kded5 &
+if ! kill -0 "$PLASMASHELL_PID" 2>/dev/null; then
+    echo "✗ Error: plasmashell exited during startup"
+    wait "$PLASMASHELL_PID" || true
+    exit 1
+fi
 
 echo ""
 echo "✓ Plasma Desktop started with hardware accelerated KWin"

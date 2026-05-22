@@ -11,8 +11,8 @@
 #include "core/outputlayer.h"
 #include "core/renderbackend.h"
 #include "qpainter/qpainterbackend.h"
-#include "qpainter/qpainterswapchain.h"
 
+#include <QImage>
 #include <QList>
 #include <QObject>
 #include <memory>
@@ -53,8 +53,7 @@ public:
 
 private:
     AndroidQPainterBackend *const m_backend;
-    std::unique_ptr<QPainterSwapchain> m_swapchain;
-    std::shared_ptr<QPainterSwapchainSlot> m_current;
+    QImage m_image;
     std::unique_ptr<CpuRenderTimeQuery> m_renderTime;
     
     // Buffer management using termux-render library

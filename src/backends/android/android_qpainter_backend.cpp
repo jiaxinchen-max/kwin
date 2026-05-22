@@ -9,9 +9,6 @@
 #include "android_qpainter_backend.h"
 #include "android_backend.h"
 #include "android_output.h"
-#include "core/graphicsbufferview.h"
-#include "core/shmgraphicsbufferallocator.h"
-#include "qpainter/qpainterswapchain.h"
 #include "utils/softwarevsyncmonitor.h"
 
 #include <drm_fourcc.h>
@@ -56,19 +53,13 @@ std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
     const QSize nativeSize(m_output->modeSize());
     qDebug() << "AndroidQPainterLayer::doBeginFrame() - size:" << nativeSize;
     
-    // Create or recreate swapchain if size changed
-    if (!m_swapchain || m_swapchain->size() != nativeSize) {
-        qInfo() << "Creating new QPainter swapchain for size" << nativeSize;
-        // Note: We don't have a GraphicsBufferAllocator in AndroidBackend yet,
-        // so we'll create a simple SHM allocator for now
-        static auto allocator = std::make_unique<ShmGraphicsBufferAllocator>();
-        m_swapchain = std::make_unique<QPainterSwapchain>(allocator.get(), nativeSize, DRM_FORMAT_XRGB8888);
-    }
-
-    m_current = m_swapchain->acquire();
-    if (!m_current) {
-        qCritical() << "Failed to acquire swapchain slot";
-        return std::nullopt;
+    if (m_image.size() != nativeSize || m_image.format() != QImage::Format_ARGB32_Premultiplied) {
+        qInfo() << "Creating Android QPainter image for size" << nativeSize;
+        m_image = QImage(nativeSize, QImage::Format_ARGB32_Premultiplied);
+        if (m_image.isNull()) {
+            qCritical() << "Failed to allocate Android QPainter image";
+            return std::nullopt;
+        }
     }
 
     // Get the global termux-render buffer (initialized by connectToRender)
@@ -83,7 +74,7 @@ std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     
     return OutputLayerBeginFrameInfo{
-        .renderTarget = RenderTarget(m_current->view()->image()),
+        .renderTarget = RenderTarget(&m_image),
         .repaint = Region::infinite(),
     };
 }
@@ -94,8 +85,8 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
     frame->addRenderTimeQuery(std::move(m_renderTime));
     
     // Copy the rendered image to the termux-render buffer
-    if (m_buffer && m_current) {
-        QImage *sourceImage = m_current->view()->image();
+    if (m_buffer && !m_image.isNull()) {
+        QImage *sourceImage = &m_image;
         if (sourceImage && !sourceImage->isNull()) {
             // Get server state for locking
             struct lorie_shared_server_state *serverState = get_serverState();
@@ -152,7 +143,7 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
 
 QImage *AndroidQPainterLayer::image()
 {
-    return m_current ? m_current->view()->image() : nullptr;
+    return m_image.isNull() ? nullptr : &m_image;
 }
 
 DrmDevice *AndroidQPainterLayer::scanoutDevice() const
@@ -168,8 +159,7 @@ QHash<uint32_t, QList<uint64_t>> AndroidQPainterLayer::supportedDrmFormats() con
 
 void AndroidQPainterLayer::releaseBuffers()
 {
-    m_current.reset();
-    m_swapchain.reset();
+    m_image = QImage();
     
     // Don't release the buffer - it's a global shared resource
     m_buffer = nullptr;
