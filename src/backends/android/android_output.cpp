@@ -75,11 +75,8 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             void *sharedBuffer = nullptr;
             lorie_mutex_lock(&state->lock, &state->lockingPid);
             const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
-            if (ret != 0 || !sharedBuffer) {
-                qWarning() << "Dropping Android frame: failed to lock LorieBuffer in present()" << ret << sharedBuffer;
-                if (ret == 0) {
-                    LorieBuffer_unlock(buffer);
-                }
+            if (ret != 0) {
+                qWarning() << "Dropping Android frame: failed to lock LorieBuffer in present()" << ret;
                 lorie_mutex_unlock(&state->lock, &state->lockingPid);
                 return true;
             }
