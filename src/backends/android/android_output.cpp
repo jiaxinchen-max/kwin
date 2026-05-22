@@ -76,12 +76,12 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             lorie_mutex_lock(&state->lock, &state->lockingPid);
             const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
             if (ret != 0 || !sharedBuffer) {
-                qWarning() << "Failed to lock Android LorieBuffer in present()" << ret;
+                qWarning() << "Dropping Android frame: failed to lock LorieBuffer in present()" << ret << sharedBuffer;
                 if (ret == 0) {
                     LorieBuffer_unlock(buffer);
                 }
                 lorie_mutex_unlock(&state->lock, &state->lockingPid);
-                return false;
+                return true;
             }
 
             const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
@@ -103,8 +103,8 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             state->drawRequested = 1;
             pthread_cond_signal(&state->cond);
 
-            LorieBuffer_unlock(buffer);
             lorie_mutex_unlock(&state->lock, &state->lockingPid);
+            LorieBuffer_unlock(buffer);
 
             qDebug() << "Presented Android QPainter frame" << desc->width << "x" << desc->height;
             return true;
