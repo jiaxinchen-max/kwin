@@ -16,7 +16,7 @@ export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
 TERMUX_RENDER_SOCKET_DIR="/data/data/com.termux/files/home/tmp"
-TERMUX_RENDER_SOCKET="$TERMUX_RENDER_SOCKET_DIR/wayland-0"
+TERMUX_RENDER_SOCKET="$TERMUX_RENDER_SOCKET_DIR/termux-render"
 export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
 unset WAYLAND_DISPLAY
 export XDG_CURRENT_DESKTOP="KDE"
