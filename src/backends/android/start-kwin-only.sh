@@ -24,6 +24,7 @@ export XDG_SESSION_TYPE="wayland"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
+export KWIN_ANDROID_REFRESH_RATE="${KWIN_ANDROID_REFRESH_RATE:-27}"
 mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
 chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
 mkdir -p "$TERMUX_RENDER_SOCKET_DIR"

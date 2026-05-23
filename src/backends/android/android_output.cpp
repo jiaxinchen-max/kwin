@@ -49,7 +49,7 @@ void AndroidOutput::updateMode()
     // Create mode
     auto mode = std::make_shared<OutputMode>(
         QSize(desc->width, desc->height),
-        60000  // 60Hz in millihertz
+        m_backend->refreshRate() * 1000
     );
     
     setState(State{

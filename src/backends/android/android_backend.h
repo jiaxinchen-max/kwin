@@ -63,6 +63,7 @@ public:
     LorieBuffer *lorieBuffer() const { return m_lorieBuffer; }
     lorie_shared_server_state *serverState() const { return m_serverState; }
     int connectionFd() const { return m_connFd; }
+    int refreshRate() const { return m_refreshRate; }
     
     // Input device accessors
     AndroidInputDevice *touchDevice() const { return m_touchDevice; }
@@ -104,7 +105,7 @@ private:
     // Configuration
     int m_width = 1080;
     int m_height = 720;
-    int m_refreshRate = 10;
+    int m_refreshRate = 27;
 };
 
 /**
