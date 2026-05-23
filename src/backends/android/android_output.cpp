@@ -78,6 +78,12 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
                 lorie_mutex_unlock(&state->lock, &state->lockingPid);
                 return true;
             }
+            if (!sharedBuffer) {
+                qWarning() << "Dropping Android frame: LorieBuffer_lock returned null shared buffer";
+                LorieBuffer_unlock(buffer);
+                lorie_mutex_unlock(&state->lock, &state->lockingPid);
+                return true;
+            }
 
             const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
             const QImage::Format targetFormat = desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM
