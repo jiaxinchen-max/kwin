@@ -200,30 +200,6 @@ else
     ACCELERATION_MODE="Basic Software"
 fi
 
-# 设置库预加载，确保 Android 系统库优先于 Termux 包库进入符号表
-ANDROID_SYSTEM_LIB_DIR="/system/lib64"
-if [ ! -f "$ANDROID_SYSTEM_LIB_DIR/libandroid.so" ]; then
-    ANDROID_SYSTEM_LIB_DIR="/system/lib"
-fi
-
-ANDROID_CORE_PRELOAD=""
-for lib in "$ANDROID_SYSTEM_LIB_DIR/libandroid.so" "$ANDROID_SYSTEM_LIB_DIR/liblog.so"; do
-    if [ -f "$lib" ]; then
-        ANDROID_CORE_PRELOAD="${ANDROID_CORE_PRELOAD:+$ANDROID_CORE_PRELOAD:}$lib"
-    fi
-done
-
-if [ -n "$ANDROID_CORE_PRELOAD" ]; then
-    export LD_PRELOAD="$ANDROID_CORE_PRELOAD${LD_PRELOAD:+:$LD_PRELOAD}"
-    echo "✓ Preloading Android system libraries: $ANDROID_CORE_PRELOAD"
-else
-    echo "⚠ Android system libraries not found for LD_PRELOAD"
-fi
-
-if [ "${KWIN_ANDROID_PRELOAD_RENDER:-0}" = "1" ]; then
-    export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$TERMUX_RENDER_LIB"
-fi
-
 # 性能调优
 export QSG_RENDER_LOOP=basic
 export QT_XCB_GL_INTEGRATION=none
@@ -232,7 +208,6 @@ echo ""
 echo "Environment setup complete:"
 echo "  Acceleration: $ACCELERATION_MODE"
 echo "  Mesa driver: ${MESA_LOADER_DRIVER_OVERRIDE:-default}"
-echo "  LD_PRELOAD: ${LD_PRELOAD:-}"
 echo ""
 
 # 启动D-Bus

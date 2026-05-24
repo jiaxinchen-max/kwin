@@ -107,10 +107,6 @@ else
     ACCELERATION_MODE="Basic Software"
 fi
 
-if [ "${KWIN_ANDROID_PRELOAD_RENDER:-0}" = "1" ]; then
-    export LD_PRELOAD="$TERMUX_RENDER_LIB:$LD_PRELOAD"
-fi
-
 # 查找KWin
 KWIN_BINARY=""
 if [ -f "../../../build/bin/kwin" ]; then
