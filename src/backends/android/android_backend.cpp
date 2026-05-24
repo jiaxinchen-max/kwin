@@ -170,8 +170,8 @@ bool AndroidBackend::connectToDisplayServer()
         m_refreshRate = refreshRate;
     }
     
-    // Set screen configuration
-    setScreenConfig(m_width, m_height, m_refreshRate);
+    setScreenConfig(m_width, m_height, m_refreshRate,
+                    AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM, LORIEBUFFER_FD);
 
     const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
     const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");
@@ -218,7 +218,8 @@ bool AndroidBackend::connectToDisplayServer()
     m_height = desc->height;
     
     qInfo() << "Connected to display server";
-    qInfo() << "Buffer size:" << m_width << "x" << m_height;
+    qInfo() << "Buffer size:" << m_width << "x" << m_height
+            << "type:" << desc->type << "format:" << desc->format;
     presentInitialRedFrame(m_lorieBuffer, m_serverState);
     
     return true;
