@@ -397,9 +397,6 @@ target_link_libraries(kwin_wayland
     kwin
     KF6::Crash
     KF6::I18n
-    android
-    log
-    m
 )
 if (KWIN_BUILD_X11)
     target_link_libraries(kwin_wayland KWinXwaylandServerModule)
