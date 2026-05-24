@@ -14,6 +14,7 @@
 
 #include <QSocketNotifier>
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
@@ -27,6 +28,55 @@ namespace Android
 static void handleRenderServerStopped()
 {
     qWarning("Termux render server stopped");
+}
+
+static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_state *state)
+{
+    if (!buffer || !state) {
+        return false;
+    }
+
+    void *sharedBuffer = nullptr;
+    lorie_mutex_lock(&state->lock, &state->lockingPid);
+    const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
+    if (ret != 0 || !sharedBuffer) {
+        qWarning() << "Failed to draw initial Android red frame" << ret << sharedBuffer;
+        if (ret == 0) {
+            LorieBuffer_unlock(buffer);
+        }
+        lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        return false;
+    }
+
+    const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
+    uint8_t *pixels = static_cast<uint8_t *>(sharedBuffer);
+    for (int y = 0; y < desc->height; ++y) {
+        uint8_t *row = pixels + qsizetype(y) * qsizetype(desc->stride) * 4;
+        for (int x = 0; x < desc->width; ++x) {
+            uint8_t *pixel = row + qsizetype(x) * 4;
+            if (desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM) {
+                pixel[0] = 0x00;
+                pixel[1] = 0x00;
+                pixel[2] = 0xff;
+                pixel[3] = 0xff;
+            } else {
+                pixel[0] = 0xff;
+                pixel[1] = 0x00;
+                pixel[2] = 0x00;
+                pixel[3] = 0xff;
+            }
+        }
+    }
+
+    LorieBuffer_unlock(buffer);
+
+    state->waitForNextFrame = false;
+    state->drawRequested = 1;
+    pthread_cond_signal(&state->cond);
+
+    lorie_mutex_unlock(&state->lock, &state->lockingPid);
+    qInfo() << "Presented initial Android red frame" << desc->width << "x" << desc->height;
+    return true;
 }
 
 // Use the keycode conversion table from termux/render/render.h.
@@ -173,6 +223,7 @@ bool AndroidBackend::connectToDisplayServer()
     
     qInfo() << "Connected to display server";
     qInfo() << "Buffer size:" << m_width << "x" << m_height;
+    presentInitialRedFrame(m_lorieBuffer, m_serverState);
     
     return true;
 }
