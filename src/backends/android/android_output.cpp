@@ -80,18 +80,24 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             }
 
             const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
-            const QImage::Format targetFormat = desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM
-                ? QImage::Format_ARGB32
-                : QImage::Format_RGBA8888;
-            const QImage convertedImage = sourceImage->convertToFormat(targetFormat);
             const qsizetype targetBytesPerLine = qsizetype(desc->stride) * 4;
-            const qsizetype copyBytesPerLine = std::min(qsizetype(desc->width) * 4, convertedImage.bytesPerLine());
-            const int copyHeight = std::min(desc->height, convertedImage.height());
 
-            for (int y = 0; y < copyHeight; ++y) {
-                std::memcpy(static_cast<char *>(sharedBuffer) + qsizetype(y) * targetBytesPerLine,
-                            convertedImage.constScanLine(y),
-                            size_t(copyBytesPerLine));
+            for (int y = 0; y < desc->height; ++y) {
+                auto *row = static_cast<unsigned char *>(sharedBuffer) + qsizetype(y) * targetBytesPerLine;
+                for (int x = 0; x < desc->width; ++x) {
+                    unsigned char *pixel = row + qsizetype(x) * 4;
+                    if (desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM) {
+                        pixel[0] = 0x00;
+                        pixel[1] = 0x00;
+                        pixel[2] = 0xff;
+                        pixel[3] = 0xff;
+                    } else {
+                        pixel[0] = 0xff;
+                        pixel[1] = 0x00;
+                        pixel[2] = 0x00;
+                        pixel[3] = 0xff;
+                    }
+                }
             }
 
             state->waitForNextFrame = false;
@@ -101,7 +107,7 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             lorie_mutex_unlock(&state->lock, &state->lockingPid);
             LorieBuffer_unlock(buffer);
 
-            qDebug() << "Presented Android QPainter frame" << desc->width << "x" << desc->height;
+            qDebug() << "Presented Android red test frame" << desc->width << "x" << desc->height;
             return true;
         }
     }
