@@ -74,7 +74,7 @@ bool AndroidBackend::initialize()
 
     qInfo() << "Initializing Android Backend";
     
-    // connectToRender() is intentionally called from main() first for protocol debugging.
+    // Connect to termux-app display server
     if (!connectToDisplayServer()) {
         qCritical() << "Failed to connect to display server";
         return false;
@@ -125,8 +125,25 @@ bool AndroidBackend::connectToDisplayServer()
         m_refreshRate = refreshRate;
     }
     
-    // The render connection is initialized at the first line of main() while debugging
-    // protocol corruption. Do not call connectToRender() here.
+    // Set screen configuration
+    setScreenConfig(m_width, m_height, m_refreshRate);
+
+    const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
+    const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");
+    qunsetenv("WAYLAND_DISPLAY");
+
+    // Connect using termux-wayland library
+    if (connectToRender() != 0) {
+        if (hadWaylandDisplay) {
+            qputenv("WAYLAND_DISPLAY", waylandDisplay);
+        }
+        qCritical() << "connectToRender() failed";
+        stopEventLoop();
+        return false;
+    }
+    if (hadWaylandDisplay) {
+        qputenv("WAYLAND_DISPLAY", waylandDisplay);
+    }
     setExitCallback(handleRenderServerStopped);
     
     // Get shared resources from termux-wayland library
