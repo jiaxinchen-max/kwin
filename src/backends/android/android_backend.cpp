@@ -39,11 +39,8 @@ static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_stat
     void *sharedBuffer = nullptr;
     lorie_mutex_lock(&state->lock, &state->lockingPid);
     const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
-    if (ret != 0 || !sharedBuffer) {
+    if (ret != 0) {
         qWarning() << "Failed to draw initial Android red frame" << ret << sharedBuffer;
-        if (ret == 0) {
-            LorieBuffer_unlock(buffer);
-        }
         lorie_mutex_unlock(&state->lock, &state->lockingPid);
         return false;
     }
@@ -68,13 +65,12 @@ static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_stat
         }
     }
 
-    LorieBuffer_unlock(buffer);
-
     state->waitForNextFrame = false;
     state->drawRequested = 1;
     pthread_cond_signal(&state->cond);
 
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
+    LorieBuffer_unlock(buffer);
     qInfo() << "Presented initial Android red frame" << desc->width << "x" << desc->height;
     return true;
 }
