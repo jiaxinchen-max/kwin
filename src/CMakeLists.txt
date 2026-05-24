@@ -398,6 +398,9 @@ target_link_libraries(kwin_wayland
     KF6::Crash
     KF6::I18n
 )
+if (TARGET KWinTermuxRender)
+    target_link_libraries(kwin_wayland KWinTermuxRender)
+endif()
 if (KWIN_BUILD_X11)
     target_link_libraries(kwin_wayland KWinXwaylandServerModule)
 endif()

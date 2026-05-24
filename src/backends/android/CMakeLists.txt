@@ -6,7 +6,9 @@ target_sources(kwin PRIVATE
 )
 
 find_library(TERMUX_RENDER_LIB NAMES termux-render REQUIRED)
-target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
+add_library(KWinTermuxRender INTERFACE)
+target_link_libraries(KWinTermuxRender INTERFACE ${TERMUX_RENDER_LIB})
+target_link_libraries(kwin PRIVATE KWinTermuxRender)
 
 # Install Plasma startup script
 install(PROGRAMS start-plasma.sh
