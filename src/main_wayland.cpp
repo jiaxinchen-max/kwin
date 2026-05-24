@@ -52,6 +52,8 @@
 #include <sched.h>
 #include <sys/resource.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 
@@ -261,8 +263,46 @@ pid_t ApplicationWayland::xwaylandPid() const
 
 } // namespace
 
+static int envIntOrDefault(const char *name, int fallback)
+{
+    const char *value = std::getenv(name);
+    if (!value) {
+        return fallback;
+    }
+
+    const int parsed = std::atoi(value);
+    return parsed > 0 ? parsed : fallback;
+}
+
+static bool initializeTermuxRenderFromMain()
+{
+    const int termuxRenderWidth = envIntOrDefault("KWIN_ANDROID_WIDTH", 1080);
+    const int termuxRenderHeight = envIntOrDefault("KWIN_ANDROID_HEIGHT", 720);
+    const int termuxRenderRefreshRate = envIntOrDefault("KWIN_ANDROID_REFRESH_RATE", 27);
+    setScreenConfig(termuxRenderWidth, termuxRenderHeight, termuxRenderRefreshRate);
+
+    const int termuxRenderInitResult = connectToRender();
+    std::fprintf(stderr,
+                 "KWin main() render init width=%d height=%d refreshRate=%d result=%d buffer=%p serverState=%p connFd=%d\n",
+                 termuxRenderWidth,
+                 termuxRenderHeight,
+                 termuxRenderRefreshRate,
+                 termuxRenderInitResult,
+                 static_cast<void *>(get_lorieBuffer()),
+                 static_cast<void *>(get_serverState()),
+                 get_conn_fd());
+    if (termuxRenderInitResult != 0) {
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
+    if (!initializeTermuxRenderFromMain()) {
+        return 1;
+    }
+
     KWin::Application::setupMalloc();
     KWin::Application::setupLocalizedString();
     KWin::gainRealTime();
