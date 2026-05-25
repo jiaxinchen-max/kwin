@@ -193,7 +193,7 @@ bool AndroidBackend::connectToDisplayServer()
     
     const int bufferType = requestedLorieBufferType();
     setScreenConfig(m_width, m_height, m_refreshRate,
-                    AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM, bufferType);
+                    AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM, bufferType);
 
     const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
     const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");
