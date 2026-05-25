@@ -66,61 +66,19 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     Q_UNUSED(frame)
     
     if (auto layer = dynamic_cast<AndroidQPainterLayer *>(m_outputLayer)) {
-        QImage *sourceImage = layer->image();
-        LorieBuffer *buffer = m_backend->lorieBuffer();
         lorie_shared_server_state *state = m_backend->serverState();
-        if (sourceImage && !sourceImage->isNull() && buffer && state) {
-            const bool canCopySourceFormat = sourceImage->format() == QImage::Format_ARGB32_Premultiplied
-                || sourceImage->format() == QImage::Format_ARGB32;
-            const QImage image = canCopySourceFormat
-                ? *sourceImage
-                : sourceImage->convertToFormat(QImage::Format_ARGB32_Premultiplied);
-            void *sharedBuffer = nullptr;
-            lorie_mutex_lock(&state->lock, &state->lockingPid);
-            const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
-            if (ret != 0) {
-                qWarning() << "Dropping Android frame: failed to lock LorieBuffer in present()" << ret;
-                lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        if (state) {
+            if (!layer->flushBuffer()) {
                 return true;
             }
 
-            const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
-            const qsizetype targetBytesPerLine = qsizetype(desc->stride) * 4;
-            const int width = std::min(desc->width, std::min(desc->stride, image.width()));
-            const int height = std::min(desc->height, image.height());
-
-            if (width < desc->width || height < desc->height) {
-                std::memset(sharedBuffer, 0, size_t(targetBytesPerLine) * size_t(desc->height));
-            }
-
-            if (desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM) {
-                const size_t copyBytes = size_t(width) * 4;
-                for (int y = 0; y < height; ++y) {
-                    auto *target = static_cast<unsigned char *>(sharedBuffer) + qsizetype(y) * targetBytesPerLine;
-                    std::memcpy(target, image.constScanLine(y), copyBytes);
-                }
-            } else {
-                for (int y = 0; y < height; ++y) {
-                    auto *target = static_cast<unsigned char *>(sharedBuffer) + qsizetype(y) * targetBytesPerLine;
-                    const auto *source = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-                    for (int x = 0; x < width; ++x) {
-                        target[x * 4 + 0] = qRed(source[x]);
-                        target[x * 4 + 1] = qGreen(source[x]);
-                        target[x * 4 + 2] = qBlue(source[x]);
-                        target[x * 4 + 3] = qAlpha(source[x]);
-                    }
-                }
-            }
-
+            lorie_mutex_lock(&state->lock, &state->lockingPid);
             state->waitForNextFrame = false;
             state->drawRequested = 1;
             pthread_cond_signal(&state->cond);
-
             lorie_mutex_unlock(&state->lock, &state->lockingPid);
-            LorieBuffer_unlock(buffer);
 
-            qDebug() << "Presented Android frame" << desc->width << "x" << desc->height
-                     << "type:" << desc->type << "format:" << desc->format;
+            qDebug() << "Presented Android frame";
             return true;
         }
     }

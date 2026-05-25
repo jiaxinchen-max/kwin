@@ -16,10 +16,9 @@
 #include <QList>
 #include <QObject>
 #include <memory>
+#include <optional>
 
-// Forward declare Buffer type from termux-render
-struct Buffer_Desc;
-typedef struct Buffer_Desc Buffer;
+struct LorieBuffer;
 
 namespace KWin
 {
@@ -44,7 +43,7 @@ public:
     std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override;
     bool doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame) override;
     
-    QImage *image();
+    bool flushBuffer();
     DrmDevice *scanoutDevice() const override;
     QHash<uint32_t, QList<uint64_t>> supportedDrmFormats() const override;
     void releaseBuffers() override;
@@ -52,12 +51,14 @@ public:
     BackendOutput *output() const { return m_output; }
 
 private:
+    bool ensureBuffer();
+    void unlockBuffer();
+
     AndroidQPainterBackend *const m_backend;
     QImage m_image;
     std::unique_ptr<CpuRenderTimeQuery> m_renderTime;
-    
-    // Buffer management using termux-render library
-    Buffer *m_buffer = nullptr;
+    LorieBuffer *m_buffer = nullptr;
+    void *m_lockedData = nullptr;
 };
 
 /**

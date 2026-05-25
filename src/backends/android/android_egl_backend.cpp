@@ -139,6 +139,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
         // No pixel copy needed, just signal frame completion
         struct lorie_shared_server_state *serverState = m_backend->androidBackend()->serverState();
         if (serverState) {
+            glFlush();
             lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
             serverState->waitForNextFrame = false;
             serverState->drawRequested = 1;
@@ -179,18 +180,24 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
                 
                 // Read pixels directly into the shared buffer
                 glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                 
-                // Signal that drawing is requested
+                ret = LorieBuffer_unlock((LorieBuffer*)m_buffer);
+                if (ret != 0) {
+                    qCritical() << "Failed to flush LorieBuffer";
+                    lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+                    return true;
+                }
+
                 serverState->waitForNextFrame = false;
                 serverState->drawRequested = 1;
                 pthread_cond_signal(&serverState->cond);
                 
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                 qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
+            } else {
+                LorieBuffer_unlock((LorieBuffer*)m_buffer);
             }
             
-            // Unlock the buffer
-            LorieBuffer_unlock((LorieBuffer*)m_buffer);
             lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
         }
     }

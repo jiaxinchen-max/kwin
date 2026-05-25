@@ -30,6 +30,21 @@ static void handleRenderServerStopped()
     qWarning("Termux render server stopped");
 }
 
+static int requestedLorieBufferType()
+{
+    const QByteArray bufferType = qgetenv("KWIN_ANDROID_BUFFER_TYPE").toLower();
+    if (bufferType == "fd" || bufferType == "fd-only") {
+        return LORIEBUFFER_FD;
+    }
+    if (bufferType == "ahb" || bufferType == "ahardwarebuffer") {
+        return LORIEBUFFER_AHARDWAREBUFFER;
+    }
+    if (qEnvironmentVariableIntValue("KWIN_ANDROID_USE_FD_BUFFER") == 1) {
+        return LORIEBUFFER_FD;
+    }
+    return LORIEBUFFER_AHARDWAREBUFFER;
+}
+
 static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_state *state)
 {
     if (!buffer || !state) {
@@ -65,12 +80,18 @@ static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_stat
         }
     }
 
+    const int unlockRet = LorieBuffer_unlock(buffer);
+    if (unlockRet != 0) {
+        qWarning() << "Failed to flush initial Android frame" << unlockRet;
+        lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        return false;
+    }
+
     state->waitForNextFrame = false;
     state->drawRequested = 1;
     pthread_cond_signal(&state->cond);
 
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
-    LorieBuffer_unlock(buffer);
     qInfo() << "Presented initial Android red frame" << desc->width << "x" << desc->height;
     return true;
 }
@@ -170,8 +191,9 @@ bool AndroidBackend::connectToDisplayServer()
         m_refreshRate = refreshRate;
     }
     
+    const int bufferType = requestedLorieBufferType();
     setScreenConfig(m_width, m_height, m_refreshRate,
-                    AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM, LORIEBUFFER_FD);
+                    AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM, bufferType);
 
     const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
     const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");

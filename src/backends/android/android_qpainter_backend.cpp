@@ -13,21 +13,23 @@
 
 #include <drm_fourcc.h>
 #include <QDebug>
-
-// Define Buffer type properly
-struct Buffer_Desc {
-    int width;
-    int height; 
-    int format;
-    void *data;
-    size_t size;
-};
-typedef struct Buffer_Desc Buffer;
+#include <optional>
 
 namespace KWin
 {
 namespace Android
 {
+
+static std::optional<QImage::Format> imageFormatForLorieFormat(int format)
+{
+    if (format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM) {
+        return QImage::Format_ARGB32_Premultiplied;
+    }
+    if (format == AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM) {
+        return QImage::Format_RGBX8888;
+    }
+    return std::nullopt;
+}
 
 AndroidQPainterLayer::AndroidQPainterLayer(BackendOutput *output, AndroidQPainterBackend *backend)
     : OutputLayer(output, OutputLayerType::Primary)
@@ -38,32 +40,14 @@ AndroidQPainterLayer::AndroidQPainterLayer(BackendOutput *output, AndroidQPainte
 
 AndroidQPainterLayer::~AndroidQPainterLayer()
 {
-    // Don't release the buffer - it's a global shared resource
-    m_buffer = nullptr;
+    unlockBuffer();
     qInfo() << "Destroyed AndroidQPainterLayer";
 }
 
 std::optional<OutputLayerBeginFrameInfo> AndroidQPainterLayer::doBeginFrame()
 {
-    const QSize nativeSize(m_output->modeSize());
-    qDebug() << "AndroidQPainterLayer::doBeginFrame() - size:" << nativeSize;
-    
-    if (m_image.size() != nativeSize || m_image.format() != QImage::Format_ARGB32_Premultiplied) {
-        qInfo() << "Creating Android QPainter image for size" << nativeSize;
-        m_image = QImage(nativeSize, QImage::Format_ARGB32_Premultiplied);
-        if (m_image.isNull()) {
-            qCritical() << "Failed to allocate Android QPainter image";
-            return std::nullopt;
-        }
-    }
-
-    // Get the global termux-render buffer (initialized by connectToRender)
-    if (!m_buffer) {
-        m_buffer = reinterpret_cast<Buffer *>(m_backend->androidBackend()->lorieBuffer());
-        if (!m_buffer) {
-            qCritical() << "Failed to get Android render buffer";
-            return std::nullopt;
-        }
+    if (!ensureBuffer()) {
+        return std::nullopt;
     }
 
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
@@ -82,9 +66,40 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
     return true;
 }
 
-QImage *AndroidQPainterLayer::image()
+bool AndroidQPainterLayer::flushBuffer()
 {
-    return m_image.isNull() ? nullptr : &m_image;
+    if (!m_buffer || !m_lockedData) {
+        return ensureBuffer();
+    }
+
+    int ret = LorieBuffer_unlock(m_buffer);
+    m_lockedData = nullptr;
+    if (ret != 0) {
+        qWarning() << "Failed to unlock Android render buffer" << ret;
+        m_image = QImage();
+        return false;
+    }
+
+    void *data = nullptr;
+    ret = LorieBuffer_lock(m_buffer, &data);
+    if (ret != 0 || !data) {
+        qWarning() << "Failed to relock Android render buffer" << ret << data;
+        m_image = QImage();
+        return false;
+    }
+
+    m_lockedData = data;
+    const LorieBuffer_Desc *desc = LorieBuffer_description(m_buffer);
+    const auto imageFormat = imageFormatForLorieFormat(desc->format);
+    if (!imageFormat) {
+        qWarning() << "Unsupported Android render buffer format" << desc->format;
+        unlockBuffer();
+        return false;
+    }
+
+    m_image = QImage(static_cast<uchar *>(m_lockedData), desc->width, desc->height,
+                     qsizetype(desc->stride) * 4, *imageFormat);
+    return !m_image.isNull();
 }
 
 DrmDevice *AndroidQPainterLayer::scanoutDevice() const
@@ -100,9 +115,59 @@ QHash<uint32_t, QList<uint64_t>> AndroidQPainterLayer::supportedDrmFormats() con
 
 void AndroidQPainterLayer::releaseBuffers()
 {
+    unlockBuffer();
+}
+
+bool AndroidQPainterLayer::ensureBuffer()
+{
+    LorieBuffer *buffer = m_backend->androidBackend()->lorieBuffer();
+    if (!buffer) {
+        qCritical() << "Failed to get Android render buffer";
+        return false;
+    }
+
+    if (m_buffer != buffer) {
+        unlockBuffer();
+        m_buffer = buffer;
+    }
+
+    if (!m_lockedData) {
+        void *data = nullptr;
+        const int ret = LorieBuffer_lock(m_buffer, &data);
+        if (ret != 0 || !data) {
+            qWarning() << "Failed to lock Android render buffer" << ret << data;
+            m_buffer = nullptr;
+            return false;
+        }
+        m_lockedData = data;
+    }
+
+    const LorieBuffer_Desc *desc = LorieBuffer_description(m_buffer);
+    const auto imageFormat = imageFormatForLorieFormat(desc->format);
+    if (!imageFormat) {
+        qWarning() << "Unsupported Android render buffer format" << desc->format;
+        unlockBuffer();
+        return false;
+    }
+
+    const QSize size(desc->width, desc->height);
+    const qsizetype bytesPerLine = qsizetype(desc->stride) * 4;
+    if (m_image.bits() != static_cast<uchar *>(m_lockedData) || m_image.size() != size
+        || m_image.bytesPerLine() != bytesPerLine || m_image.format() != *imageFormat) {
+        m_image = QImage(static_cast<uchar *>(m_lockedData), desc->width, desc->height,
+                         bytesPerLine, *imageFormat);
+    }
+
+    return !m_image.isNull();
+}
+
+void AndroidQPainterLayer::unlockBuffer()
+{
     m_image = QImage();
-    
-    // Don't release the buffer - it's a global shared resource
+    if (m_buffer && m_lockedData) {
+        LorieBuffer_unlock(m_buffer);
+    }
+    m_lockedData = nullptr;
     m_buffer = nullptr;
 }
 
