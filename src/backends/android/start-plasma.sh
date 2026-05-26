@@ -49,12 +49,16 @@ export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
 unset WAYLAND_DISPLAY
 export XDG_CURRENT_DESKTOP="KDE"
 export XDG_SESSION_TYPE="wayland"
+export DESKTOP_SESSION="${DESKTOP_SESSION:-plasma}"
+export KDE_FULL_SESSION="${KDE_FULL_SESSION:-true}"
+export KDE_SESSION_VERSION="${KDE_SESSION_VERSION:-6}"
 export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
 export KWIN_ANDROID_REFRESH_RATE="${KWIN_ANDROID_REFRESH_RATE:-27}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
+export XDG_MENU_PREFIX="${XDG_MENU_PREFIX:-plasma-}"
 export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
 export PATH="../../../build/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
@@ -223,12 +227,29 @@ else
     echo "Using existing D-Bus session"
 fi
 
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment \
+        DBUS_SESSION_BUS_ADDRESS \
+        DESKTOP_SESSION \
+        KDE_FULL_SESSION \
+        KDE_SESSION_VERSION \
+        KWIN_BACKEND \
+        KWIN_WAYLAND_SOCKET \
+        QT_QPA_PLATFORM \
+        WAYLAND_DISPLAY \
+        XDG_CONFIG_DIRS \
+        XDG_CURRENT_DESKTOP \
+        XDG_DATA_DIRS \
+        XDG_MENU_PREFIX \
+        XDG_RUNTIME_DIR \
+        XDG_SESSION_TYPE || true
+fi
+
 # 启动KWin Wayland
 echo "Starting KWin with hardware acceleration..."
 kwin_wayland \
     --socket "$KWIN_WAYLAND_SOCKET" \
     --xwayland \
-    --no-kactivities \
     --no-global-shortcuts &
 KWIN_PID=$!
 sleep 3
@@ -238,6 +259,9 @@ if ! kill -0 "$KWIN_PID" 2>/dev/null; then
     exit 1
 fi
 export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment WAYLAND_DISPLAY || true
+fi
 
 # 启动Plasma组件
 echo "Starting Plasma components..."
@@ -270,6 +294,12 @@ if ! kill -0 "$KACTIVITYMANAGERD_PID" 2>/dev/null; then
     echo "✗ Error: kactivitymanagerd exited during startup"
     wait "$KACTIVITYMANAGERD_PID" || true
     exit 1
+fi
+
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+    kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+elif command -v kbuildsycoca5 >/dev/null 2>&1; then
+    kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
 fi
 
 if command -v plasmashell >/dev/null 2>&1; then

@@ -12,7 +12,6 @@
 // termux_display_api.h removed - using termux/render/render.h directly
 #include "core/outputlayer.h"
 #include "core/renderloop.h"
-#include <QDebug>
 #include <QImage>
 #include <algorithm>
 #include <cstring>
@@ -78,7 +77,6 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
             pthread_cond_signal(&state->cond);
             lorie_mutex_unlock(&state->lock, &state->lockingPid);
 
-            qDebug() << "Presented Android frame";
             return true;
         }
     }
