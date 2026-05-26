@@ -96,6 +96,20 @@ static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_stat
     return true;
 }
 
+static uint32_t lorieButtonToLinux(uint8_t detail)
+{
+    switch (detail) {
+    case 1:
+        return BTN_LEFT;
+    case 2:
+        return BTN_RIGHT;
+    case 3:
+        return BTN_MIDDLE;
+    default:
+        return detail;
+    }
+}
+
 // Use the keycode conversion table from termux/render/render.h.
 
 AndroidBackend::AndroidBackend(QObject *parent)
@@ -369,7 +383,7 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         
         if (mouse.detail > 0) {
             PointerButtonState state = mouse.down ? PointerButtonState::Pressed : PointerButtonState::Released;
-            Q_EMIT m_pointerDevice->pointerButtonChanged(mouse.detail, state, std::chrono::milliseconds(0), m_pointerDevice);
+            Q_EMIT m_pointerDevice->pointerButtonChanged(lorieButtonToLinux(mouse.detail), state, std::chrono::milliseconds(0), m_pointerDevice);
         }
         
         Q_EMIT m_pointerDevice->pointerFrame(m_pointerDevice);
