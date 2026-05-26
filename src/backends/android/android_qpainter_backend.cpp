@@ -69,37 +69,18 @@ bool AndroidQPainterLayer::doEndFrame(const Region &renderedDeviceRegion, const 
 bool AndroidQPainterLayer::flushBuffer()
 {
     if (!m_buffer || !m_lockedData) {
-        return ensureBuffer();
+        return true;
     }
 
     int ret = LorieBuffer_unlock(m_buffer);
     m_lockedData = nullptr;
+    m_image = QImage();
     if (ret != 0) {
         qWarning() << "Failed to unlock Android render buffer" << ret;
-        m_image = QImage();
+        m_buffer = nullptr;
         return false;
     }
-
-    void *data = nullptr;
-    ret = LorieBuffer_lock(m_buffer, &data);
-    if (ret != 0 || !data) {
-        qWarning() << "Failed to relock Android render buffer" << ret << data;
-        m_image = QImage();
-        return false;
-    }
-
-    m_lockedData = data;
-    const LorieBuffer_Desc *desc = LorieBuffer_description(m_buffer);
-    const auto imageFormat = imageFormatForLorieFormat(desc->format);
-    if (!imageFormat) {
-        qWarning() << "Unsupported Android render buffer format" << desc->format;
-        unlockBuffer();
-        return false;
-    }
-
-    m_image = QImage(static_cast<uchar *>(m_lockedData), desc->width, desc->height,
-                     qsizetype(desc->stride) * 4, *imageFormat);
-    return !m_image.isNull();
+    return true;
 }
 
 DrmDevice *AndroidQPainterLayer::scanoutDevice() const

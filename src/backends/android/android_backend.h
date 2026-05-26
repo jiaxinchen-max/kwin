@@ -98,6 +98,7 @@ private:
     // Input handling
     QSocketNotifier *m_inputNotifier = nullptr;
     QByteArray m_inputBuffer;
+    qint64 m_inputBytesToDiscard = 0;
     AndroidInputDevice *m_touchDevice = nullptr;
     AndroidInputDevice *m_keyboardDevice = nullptr;
     AndroidInputDevice *m_pointerDevice = nullptr;

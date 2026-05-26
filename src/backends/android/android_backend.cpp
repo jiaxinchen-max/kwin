@@ -13,6 +13,8 @@
 #include "input.h"
 
 #include <QSocketNotifier>
+#include <algorithm>
+#include <chrono>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -45,65 +47,6 @@ static int requestedLorieBufferType()
     return LORIEBUFFER_FD;
 }
 
-static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_state *state)
-{
-    if (!buffer || !state) {
-        return false;
-    }
-
-    void *sharedBuffer = nullptr;
-    lorie_mutex_lock(&state->lock, &state->lockingPid);
-    const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
-    if (ret != 0 || !sharedBuffer) {
-        qWarning() << "Failed to draw initial Android red frame" << ret << sharedBuffer;
-        if (ret == 0) {
-            LorieBuffer_unlock(buffer);
-        }
-        lorie_mutex_unlock(&state->lock, &state->lockingPid);
-        return false;
-    }
-
-    const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
-    if (!desc) {
-        LorieBuffer_unlock(buffer);
-        lorie_mutex_unlock(&state->lock, &state->lockingPid);
-        return false;
-    }
-    uint8_t *pixels = static_cast<uint8_t *>(sharedBuffer);
-    for (int y = 0; y < desc->height; ++y) {
-        uint8_t *row = pixels + qsizetype(y) * qsizetype(desc->stride) * 4;
-        for (int x = 0; x < desc->width; ++x) {
-            uint8_t *pixel = row + qsizetype(x) * 4;
-            if (desc->format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM) {
-                pixel[0] = 0x00;
-                pixel[1] = 0x00;
-                pixel[2] = 0xff;
-                pixel[3] = 0xff;
-            } else {
-                pixel[0] = 0xff;
-                pixel[1] = 0x00;
-                pixel[2] = 0x00;
-                pixel[3] = 0xff;
-            }
-        }
-    }
-
-    const int unlockRet = LorieBuffer_unlock(buffer);
-    if (unlockRet != 0) {
-        qWarning() << "Failed to flush initial Android frame" << unlockRet;
-        lorie_mutex_unlock(&state->lock, &state->lockingPid);
-        return false;
-    }
-
-    state->waitForNextFrame = false;
-    state->drawRequested = 1;
-    pthread_cond_signal(&state->cond);
-
-    lorie_mutex_unlock(&state->lock, &state->lockingPid);
-    qInfo() << "Presented initial Android red frame" << desc->width << "x" << desc->height;
-    return true;
-}
-
 static uint32_t lorieButtonToLinux(uint8_t detail)
 {
     switch (detail) {
@@ -116,6 +59,23 @@ static uint32_t lorieButtonToLinux(uint8_t detail)
     default:
         return detail;
     }
+}
+
+static size_t payloadSizeForInputEvent(const lorieEvent &event)
+{
+    switch (event.type) {
+    case EVENT_SCREEN_SIZE:
+        return event.screenSize.name_size;
+    case EVENT_CLIPBOARD_SEND:
+        return event.clipboardSend.count;
+    default:
+        return 0;
+    }
+}
+
+static std::chrono::microseconds currentInputTime()
+{
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 }
 
 // Use the keycode conversion table from termux/render/render.h.
@@ -264,10 +224,6 @@ bool AndroidBackend::connectToDisplayServer()
     qInfo() << "Connected to display server";
     qInfo() << "Buffer size:" << m_width << "x" << m_height
             << "type:" << desc->type << "format:" << desc->format;
-    if (qEnvironmentVariableIntValue("KWIN_ANDROID_PRESENT_INITIAL_FRAME") == 1) {
-        presentInitialRedFrame(m_lorieBuffer, m_serverState);
-    }
-    
     return true;
 }
 
@@ -347,10 +303,34 @@ void AndroidBackend::handleInputEvents()
 
     const qsizetype eventSize = static_cast<qsizetype>(sizeof(lorieEvent));
     while (m_inputBuffer.size() >= eventSize) {
+        if (m_inputBytesToDiscard > 0) {
+            const qsizetype discardSize = std::min<qint64>(m_inputBuffer.size(), m_inputBytesToDiscard);
+            m_inputBuffer.remove(0, discardSize);
+            m_inputBytesToDiscard -= discardSize;
+            if (m_inputBytesToDiscard > 0) {
+                break;
+            }
+        }
+        if (m_inputBuffer.size() < eventSize) {
+            break;
+        }
+
         lorieEvent e = {};
         std::memcpy(&e, m_inputBuffer.constData(), sizeof(e));
         m_inputBuffer.remove(0, eventSize);
+
+        const qint64 payloadSize = static_cast<qint64>(payloadSizeForInputEvent(e));
+        if (payloadSize > 0) {
+            const qsizetype discardSize = std::min<qint64>(m_inputBuffer.size(), payloadSize);
+            m_inputBuffer.remove(0, discardSize);
+            m_inputBytesToDiscard = payloadSize - discardSize;
+        }
+
         processInputEvent(e);
+
+        if (m_inputBytesToDiscard > 0) {
+            break;
+        }
     }
 }
 
@@ -383,17 +363,18 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         
         const auto &mouse = e.mouse;
         const QPointF pos(mouse.x, mouse.y);
+        const auto time = currentInputTime();
         
         if (mouse.relative) {
             QPointF delta(mouse.x, mouse.y);
-            Q_EMIT m_pointerDevice->pointerMotion(delta, delta, std::chrono::microseconds(0), m_pointerDevice);
+            Q_EMIT m_pointerDevice->pointerMotion(delta, delta, time, m_pointerDevice);
         } else {
-            Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, std::chrono::microseconds(0), m_pointerDevice);
+            Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, time, m_pointerDevice);
         }
         
         if (mouse.detail > 0) {
             PointerButtonState state = mouse.down ? PointerButtonState::Pressed : PointerButtonState::Released;
-            Q_EMIT m_pointerDevice->pointerButtonChanged(lorieButtonToLinux(mouse.detail), state, std::chrono::milliseconds(0), m_pointerDevice);
+            Q_EMIT m_pointerDevice->pointerButtonChanged(lorieButtonToLinux(mouse.detail), state, time, m_pointerDevice);
         }
         
         Q_EMIT m_pointerDevice->pointerFrame(m_pointerDevice);
