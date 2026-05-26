@@ -42,7 +42,7 @@ static int requestedLorieBufferType()
     if (qEnvironmentVariableIntValue("KWIN_ANDROID_USE_FD_BUFFER") == 1) {
         return LORIEBUFFER_FD;
     }
-    return LORIEBUFFER_AHARDWAREBUFFER;
+    return LORIEBUFFER_FD;
 }
 
 static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_state *state)
@@ -54,13 +54,21 @@ static bool presentInitialRedFrame(LorieBuffer *buffer, lorie_shared_server_stat
     void *sharedBuffer = nullptr;
     lorie_mutex_lock(&state->lock, &state->lockingPid);
     const int ret = LorieBuffer_lock(buffer, &sharedBuffer);
-    if (ret != 0) {
+    if (ret != 0 || !sharedBuffer) {
         qWarning() << "Failed to draw initial Android red frame" << ret << sharedBuffer;
+        if (ret == 0) {
+            LorieBuffer_unlock(buffer);
+        }
         lorie_mutex_unlock(&state->lock, &state->lockingPid);
         return false;
     }
 
     const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
+    if (!desc) {
+        LorieBuffer_unlock(buffer);
+        lorie_mutex_unlock(&state->lock, &state->lockingPid);
+        return false;
+    }
     uint8_t *pixels = static_cast<uint8_t *>(sharedBuffer);
     for (int y = 0; y < desc->height; ++y) {
         uint8_t *row = pixels + qsizetype(y) * qsizetype(desc->stride) * 4;
@@ -256,7 +264,9 @@ bool AndroidBackend::connectToDisplayServer()
     qInfo() << "Connected to display server";
     qInfo() << "Buffer size:" << m_width << "x" << m_height
             << "type:" << desc->type << "format:" << desc->format;
-    presentInitialRedFrame(m_lorieBuffer, m_serverState);
+    if (qEnvironmentVariableIntValue("KWIN_ANDROID_PRESENT_INITIAL_FRAME") == 1) {
+        presentInitialRedFrame(m_lorieBuffer, m_serverState);
+    }
     
     return true;
 }
