@@ -6,8 +6,11 @@ target_sources(kwin PRIVATE
 )
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(TERMUX_RENDER REQUIRED IMPORTED_TARGET termux-render)
-target_link_libraries(kwin PRIVATE PkgConfig::TERMUX_RENDER)
+pkg_check_modules(TERMUX_RENDER REQUIRED termux-render)
+target_include_directories(kwin PRIVATE ${TERMUX_RENDER_INCLUDE_DIRS})
+target_link_directories(kwin PRIVATE ${TERMUX_RENDER_LIBRARY_DIRS})
+target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIBRARIES})
+target_compile_options(kwin PRIVATE ${TERMUX_RENDER_CFLAGS_OTHER})
 
 # Install Plasma startup script
 install(PROGRAMS start-plasma.sh
