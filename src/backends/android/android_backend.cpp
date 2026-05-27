@@ -7,6 +7,7 @@
 */
 
 #include "android_backend.h"
+#include "android_egl_backend.h"
 #include "android_qpainter_backend.h"
 #include "android_output.h"
 #include "core/session.h"
@@ -243,8 +244,13 @@ std::unique_ptr<InputBackend> AndroidBackend::createInputBackend()
 
 std::unique_ptr<EglBackend> AndroidBackend::createOpenGLBackend()
 {
-    qInfo() << "Android OpenGL backend disabled";
-    return nullptr;
+    const int enableEgl = qEnvironmentVariableIntValue("KWIN_ANDROID_ENABLE_EGL");
+    if (enableEgl == 0) {
+        qInfo() << "Android EGL backend disabled by KWIN_ANDROID_ENABLE_EGL=0";
+        return nullptr;
+    }
+    qInfo() << "Creating Android EGL backend";
+    return std::make_unique<AndroidEglBackend>(this);
 }
 
 std::unique_ptr<QPainterBackend> AndroidBackend::createQPainterBackend()
@@ -261,6 +267,7 @@ EglDisplay *AndroidBackend::sceneEglDisplayObject() const
 QList<CompositingType> AndroidBackend::supportedCompositors() const
 {
     QList<CompositingType> compositors;
+    compositors.append(OpenGLCompositing);
     compositors.append(QPainterCompositing);
     return compositors;
 }

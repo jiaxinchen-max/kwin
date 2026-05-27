@@ -16,7 +16,12 @@ for arg in "$@"; do
     esac
 done
 
-PLASMA_LOG="${PLASMA_LOG:-$(pwd)/plasma.log}"
+# 环境变量设置（日志初始化前）
+export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
+export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
+
+PLASMA_LOG="${PLASMA_LOG:-$PREFIX/tmp/start-plasma.log}"
+mkdir -p "$(dirname "$PLASMA_LOG")"
 : > "$PLASMA_LOG"
 if [ "$VERBOSE_LOG" = "1" ]; then
     exec > >(tee -a "$PLASMA_LOG") 2>&1
@@ -42,8 +47,6 @@ if [ "$INSTALL_DEPS" = "1" ]; then
 fi
 
 # 环境变量设置
-export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
-export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
 export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
 unset WAYLAND_DISPLAY
@@ -56,6 +59,9 @@ export QT_QPA_PLATFORM="wayland"
 export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
 export KWIN_ANDROID_REFRESH_RATE="${KWIN_ANDROID_REFRESH_RATE:-27}"
+export KWIN_ANDROID_BUFFER_TYPE="${KWIN_ANDROID_BUFFER_TYPE:-fd}"
+export KWIN_ANDROID_USE_FD_BUFFER="${KWIN_ANDROID_USE_FD_BUFFER:-1}"
+export KWIN_ANDROID_ENABLE_EGL="${KWIN_ANDROID_ENABLE_EGL:-1}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export XDG_MENU_PREFIX="${XDG_MENU_PREFIX:-plasma-}"
