@@ -32,16 +32,10 @@ mkdir -p "$TERMUX_RENDER_SOCKET_DIR"
 echo "Checking dependencies..."
 
 # 检查termux-render库
-TERMUX_RENDER_LIB=""
-for lib in "libtermux-render.so" "termux-render.so" "librender.so"; do
-    if [ -f "$PREFIX/lib/$lib" ]; then
-        TERMUX_RENDER_LIB="$PREFIX/lib/$lib"
-        echo "✓ Found termux-render: $TERMUX_RENDER_LIB"
-        break
-    fi
-done
-
-if [ -z "$TERMUX_RENDER_LIB" ]; then
+TERMUX_RENDER_LIB="$PREFIX/lib/libtermux-render.so"
+if [ -f "$TERMUX_RENDER_LIB" ]; then
+    echo "✓ Found termux-render: $TERMUX_RENDER_LIB"
+else
     echo "✗ Error: termux-display-client library not found"
     exit 1
 fi

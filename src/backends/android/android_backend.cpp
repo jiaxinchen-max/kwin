@@ -42,9 +42,6 @@ static int requestedLorieBufferType()
     if (bufferType == "ahb" || bufferType == "ahardwarebuffer") {
         return LORIEBUFFER_AHARDWAREBUFFER;
     }
-    if (qEnvironmentVariableIntValue("KWIN_ANDROID_USE_FD_BUFFER") == 1) {
-        return LORIEBUFFER_FD;
-    }
     return LORIEBUFFER_FD;
 }
 

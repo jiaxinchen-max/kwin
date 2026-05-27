@@ -5,8 +5,9 @@ target_sources(kwin PRIVATE
     android_qpainter_backend.cpp
 )
 
-find_library(TERMUX_RENDER_LIB NAMES termux-render REQUIRED)
-target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(TERMUX_RENDER REQUIRED IMPORTED_TARGET termux-render)
+target_link_libraries(kwin PRIVATE PkgConfig::TERMUX_RENDER)
 
 # Install Plasma startup script
 install(PROGRAMS start-plasma.sh

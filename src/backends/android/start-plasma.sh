@@ -60,13 +60,11 @@ export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
 export KWIN_ANDROID_REFRESH_RATE="${KWIN_ANDROID_REFRESH_RATE:-27}"
 export KWIN_ANDROID_BUFFER_TYPE="${KWIN_ANDROID_BUFFER_TYPE:-fd}"
-export KWIN_ANDROID_USE_FD_BUFFER="${KWIN_ANDROID_USE_FD_BUFFER:-1}"
 export KWIN_ANDROID_ENABLE_EGL="${KWIN_ANDROID_ENABLE_EGL:-1}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export XDG_MENU_PREFIX="${XDG_MENU_PREFIX:-plasma-}"
 export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
-export PATH="../../../build/bin:$PATH"
 mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
 chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
 
@@ -108,16 +106,10 @@ find_kactivitymanagerd() {
 echo "Checking dependencies..."
 
 # 检查termux-render库
-TERMUX_RENDER_LIB=""
-for lib in "libtermux-render.so" "termux-render.so" "librender.so"; do
-    if [ -f "$PREFIX/lib/$lib" ]; then
-        TERMUX_RENDER_LIB="$PREFIX/lib/$lib"
-        echo "✓ Found termux-render: $TERMUX_RENDER_LIB"
-        break
-    fi
-done
-
-if [ -z "$TERMUX_RENDER_LIB" ]; then
+TERMUX_RENDER_LIB="$PREFIX/lib/libtermux-render.so"
+if [ -f "$TERMUX_RENDER_LIB" ]; then
+    echo "✓ Found termux-render: $TERMUX_RENDER_LIB"
+else
     echo "✗ Error: termux-display-client library not found"
     exit 1
 fi
