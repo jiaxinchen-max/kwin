@@ -82,14 +82,14 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     }
 
     // Signal the termux-app display server even if no software layer image is available.
-    lorie_shared_server_state *state = m_backend->serverState();
-    if (state) {
-        lorie_mutex_lock(&state->lock, &state->lockingPid);
-        state->drawRequested = 1;
-        pthread_cond_signal(&state->cond);
-        lorie_mutex_unlock(&state->lock, &state->lockingPid);
-        return true;
-    }
+    // lorie_shared_server_state *state = m_backend->serverState();
+    // if (state) {
+    //     lorie_mutex_lock(&state->lock, &state->lockingPid);
+    //     state->drawRequested = 1;
+    //     pthread_cond_signal(&state->cond);
+    //     lorie_mutex_unlock(&state->lock, &state->lockingPid);
+    //     return true;
+    // }
     return false;
 }
 

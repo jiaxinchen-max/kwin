@@ -104,9 +104,9 @@ private:
     AndroidInputDevice *m_pointerDevice = nullptr;
     
     // Configuration
-    int m_width = 1080;
-    int m_height = 720;
-    int m_refreshRate = 27;
+    int m_width = 1024;
+    int m_height = 768;
+    int m_refreshRate = 30;
 };
 
 /**
