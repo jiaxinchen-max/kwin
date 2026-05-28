@@ -48,8 +48,7 @@ fi
 
 # 环境变量设置
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
-export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-1}"
-unset WAYLAND_DISPLAY
+export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-0}"
 export XDG_CURRENT_DESKTOP="KDE"
 export XDG_SESSION_TYPE="wayland"
 export DESKTOP_SESSION="${DESKTOP_SESSION:-plasma}"
