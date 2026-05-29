@@ -29,6 +29,10 @@ namespace KWin
 namespace LibInput
 {
 
+#if defined(__ANDROID__) || defined(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+#define KWIN_USE_TERMUX_LIBINPUT_CONTEXT 1
+#endif
+
 static void libinputLogHandler(libinput *libinput, libinput_log_priority priority, const char *format, va_list args)
 {
     char buf[1024];
@@ -51,7 +55,7 @@ static void libinputLogHandler(libinput *libinput, libinput_log_priority priorit
 
 Context::Context(Session *session, std::unique_ptr<Udev> &&udev)
     : m_session(session)
-#ifdef __ANDROID__
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
     , m_libinput(nullptr)
     , m_termux_fd(-1)
 #else
@@ -60,7 +64,7 @@ Context::Context(Session *session, std::unique_ptr<Udev> &&udev)
     , m_suspended(false)
     , m_udev(std::move(udev))
 {
-#ifdef __ANDROID__
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
     // Get termux-display-client event fd (real input events)
     m_termux_fd = get_conn_fd();
     if (m_termux_fd >= 0) {
@@ -86,7 +90,7 @@ bool Context::initialize()
     if (!isValid()) {
         return false;
     }
-#ifdef __ANDROID__
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
     // For Termux, we don't need to assign seat
     return true;
 #else

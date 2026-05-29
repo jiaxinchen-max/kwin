@@ -70,7 +70,7 @@ private:
 
     Session *m_session;
     struct libinput *m_libinput;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
     int m_termux_fd;
 #endif
     bool m_suspended;
