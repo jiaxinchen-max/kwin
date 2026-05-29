@@ -16,61 +16,61 @@ Using Android backend
 Accepting client connections on sockets: QList("wayland-0")
 Initializing Android Backend
 Connecting to termux display server...
-[2026-05-29 17:27:57] INFO  : setScreenConfig width=1024 height=768 framerate=30 format=2 type=2
-[2026-05-29 17:27:57] INFO  : connectToRender start socket=/data/data/com.termux/files/home/tmp/termux-render type=SOCK_STREAM sizeof(lorieEvent)=32
-[2026-05-29 17:27:57] INFO  : Connected to render socket, event_fd=15 attempt=1/5
-[2026-05-29 17:27:57] INFO  : Created render event thread
-[2026-05-29 17:27:57] INFO  : Sent handshake magic length=11
-[2026-05-29 17:27:57] INFO  : Waiting for buffer initialization
-[2026-05-29 17:27:57] INFO  : Render blocking event loop started, event_fd=15 sizeof(lorieEvent)=32
-[2026-05-29 17:27:57] INFO  : Received event type=20 (EVENT_SERVER_VERIFY_SUCCEED)
-[2026-05-29 17:27:57] INFO  : Handling EVENT_SERVER_VERIFY_SUCCEED
-[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_BUFFER
-[2026-05-29 17:27:57] INFO  : Sent EVENT_SCREEN_SIZE width=1024 height=768 framerate=30 format=2 type=2
-[2026-05-29 17:27:57] INFO  : Received event type=2 (EVENT_ADD_BUFFER)
-[2026-05-29 17:27:57] INFO  : Handling EVENT_ADD_BUFFER
-[2026-05-29 17:27:57] INFO  : Receiving LorieBuffer from socket fd=15 sizeof(LorieBuffer)=120 sizeof(desc)=40
-[2026-05-29 17:27:57] INFO  : Received raw LorieBuffer desc width=1024 stride=1024 height=768 format=2 type=2 id=0 fd=-1
-[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=16
-[2026-05-29 17:27:57] INFO  : Received LorieBuffer fd handle=16
-[2026-05-29 17:27:57] INFO  : LorieBuffer receive completed out=0xb400007d1466a8b0
-[2026-05-29 17:27:57] INFO  : Received buffer width=1024 stride=1024 height=768 format=2 type=2 id=0
-[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_SERVER_STATE
-[2026-05-29 17:27:57] INFO  : Received event type=1 (EVENT_SHARED_SERVER_STATE)
-[2026-05-29 17:27:57] INFO  : Handling EVENT_SHARED_SERVER_STATE
-[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=17
-[2026-05-29 17:27:57] INFO  : Received shared server state fd=17
-[2026-05-29 17:27:57] INFO  : Mapped shared server state at 0x7c202a2000
-[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_EVENT_FD
-[2026-05-29 17:27:57] INFO  : Received event type=19 (EVENT_SHARED_EVENT_FD)
-[2026-05-29 17:27:57] INFO  : Handling EVENT_SHARED_EVENT_FD
-[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=17
-[2026-05-29 17:27:57] INFO  : Received input event fd=17
-[2026-05-29 17:27:57] INFO  : Sent EVENT_CLIENT_VERIFY_SUCCEED
-[2026-05-29 17:27:57] INFO  : Buffer initialization completed
+[2026-05-29 17:55:02] INFO  : setScreenConfig width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 17:55:02] INFO  : connectToRender start socket=/data/data/com.termux/files/home/tmp/termux-render type=SOCK_STREAM sizeof(lorieEvent)=32
+[2026-05-29 17:55:02] INFO  : Connected to render socket, event_fd=15 attempt=1/5
+[2026-05-29 17:55:02] INFO  : Created render event thread
+[2026-05-29 17:55:02] INFO  : Sent handshake magic length=11
+[2026-05-29 17:55:02] INFO  : Waiting for buffer initialization
+[2026-05-29 17:55:02] INFO  : Render blocking event loop started, event_fd=15 sizeof(lorieEvent)=32
+[2026-05-29 17:55:02] INFO  : Received event type=20 (EVENT_SERVER_VERIFY_SUCCEED)
+[2026-05-29 17:55:02] INFO  : Handling EVENT_SERVER_VERIFY_SUCCEED
+[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_BUFFER
+[2026-05-29 17:55:02] INFO  : Sent EVENT_SCREEN_SIZE width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 17:55:02] INFO  : Received event type=2 (EVENT_ADD_BUFFER)
+[2026-05-29 17:55:02] INFO  : Handling EVENT_ADD_BUFFER
+[2026-05-29 17:55:02] INFO  : Receiving LorieBuffer from socket fd=15 sizeof(LorieBuffer)=120 sizeof(desc)=40
+[2026-05-29 17:55:02] INFO  : Received raw LorieBuffer desc width=1366 stride=1366 height=768 format=2 type=2 id=1 fd=-1
+[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=16
+[2026-05-29 17:55:02] INFO  : Received LorieBuffer fd handle=16
+[2026-05-29 17:55:02] INFO  : LorieBuffer receive completed out=0xb400006fb6b853a0
+[2026-05-29 17:55:02] INFO  : Received buffer width=1366 stride=1366 height=768 format=2 type=2 id=1
+[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_SERVER_STATE
+[2026-05-29 17:55:02] INFO  : Received event type=1 (EVENT_SHARED_SERVER_STATE)
+[2026-05-29 17:55:02] INFO  : Handling EVENT_SHARED_SERVER_STATE
+[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 17:55:02] INFO  : Received shared server state fd=17
+[2026-05-29 17:55:02] INFO  : Mapped shared server state at 0x6ec26de000
+[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_EVENT_FD
+[2026-05-29 17:55:02] INFO  : Received event type=19 (EVENT_SHARED_EVENT_FD)
+[2026-05-29 17:55:02] INFO  : Handling EVENT_SHARED_EVENT_FD
+[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 17:55:02] INFO  : Received input event fd=17
+[2026-05-29 17:55:02] INFO  : Sent EVENT_CLIENT_VERIFY_SUCCEED
+[2026-05-29 17:55:02] INFO  : Buffer initialization completed
 Connected to display server
-Buffer size: 1024 x 768 type: 2 format: 2
+Buffer size: 1366 x 768 type: 2 format: 2
 Android Backend initialized successfully
 Creating Android EGL backend
 Initializing Android EGL backend with Mesa rendering
-Environment detection:
-  PRoot: true
-  Container: false
-  Plain Termux: false
-Vulkan found 19 extensions - GPU may be accessible
-PRoot: GPU access available - Zink may work
+Existing Mesa environment requests llvmpipe
 Mesa library detected
-Zink hardware acceleration available
-Configuring Mesa for Zink hardware acceleration
-Zink hardware acceleration configured
-GALLIUM_DRIVER= zink
+Configuring Mesa for llvmpipe software rendering
+Mesa software rendering configured
+LIBGL_ALWAYS_SOFTWARE= 1
 Mesa rendering mode configured successfully
 Initializing Android EGL backend
-Initializing Android EGL backend with Mesa software rendering
-eglInitialize failed: 3001
-Mesa software rendering may not be available
+Initializing Android EGL backend
+Configuring Mesa for llvmpipe software rendering
+Mesa software rendering configured
+LIBGL_ALWAYS_SOFTWARE= 1
+Mesa rendering mode configured successfully
+kwin_scene_opengl: eglInitialize failed
+kwin_scene_opengl: Error during eglInitialize  "EGL_NOT_INITIALIZED"
+Failed to create EglDisplay
 kwin_scene_opengl: Creating the OpenGL rendering failed:  "Failed to initialize EGL"
 Destroying Android EGL backend
+kwin_core: Could not fulfill the requested compositing mode in KWIN_COMPOSE: 1 . Exiting.
 Creating Android QPainter backend
 Initializing Android QPainter backend
 Adding output to QPainter backend: "AndroidScreen-0"
@@ -102,8 +102,8 @@ Launch applications:
   kate       # Text editor
 
 Usage:
-  ./start-plasma.sh                # Start Plasma (normal)
-  ./start-plasma.sh --install-deps # Install dependencies first
+  /data/data/com.termux/files/usr/bin/start-plasma                # Start Plasma (normal)
+  /data/data/com.termux/files/usr/bin/start-plasma --install-deps # Install dependencies first
 
 Press Ctrl+C to stop...
 kf.solid.backends.fstab: Failed to acquire watch file descriptor No such file or directory
@@ -114,15 +114,15 @@ QDBusObjectPath: invalid path "/modules/plasma-session-shortcuts"
 kf.dbusaddons: The kded module name "plasma-session-shortcuts" is invalid!
 qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
 org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
-org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400006e3d0ee810
-org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400006e3d0ef710
-org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400006e3d0ef710
-org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400006e3d0f0d90
+org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400007df11474d0
+org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400007df11489d0
+org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400007df11489d0
+org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400007df1148c10
 Registering ":1.9/StatusNotifierItem" to system tray
 org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
 Destroying Android QPainter backend
 Destroyed AndroidQPainterLayer
-[2026-05-29 17:28:56] ERROR : Connection closed
-[2026-05-29 17:28:56] ERROR : Render event loop cleanup, buffer_ready=1 event_fd=15 conn_fd=17
+[2026-05-29 17:56:11] ERROR : Connection closed
+[2026-05-29 17:56:11] ERROR : Render event loop cleanup, buffer_ready=1 event_fd=15 conn_fd=17
 Failed to write to the pipe: Bad file descriptor.
 Failed to write to the pipe: Bad file descriptor.

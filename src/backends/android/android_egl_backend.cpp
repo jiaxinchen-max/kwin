@@ -75,6 +75,10 @@ GLAPI void GLAPIENTRY glEGLImageTargetTexture2DOES(GLenum target, GLeglImageOES 
 
 #endif
 
+#ifndef EGL_PLATFORM_SURFACELESS_MESA
+#define EGL_PLATFORM_SURFACELESS_MESA 0x31DD
+#endif
+
 namespace KWin
 {
 namespace Android
@@ -472,8 +476,23 @@ bool AndroidEglBackend::initializeEgl()
 
     setupMesaRendering(m_renderingMode);
     
-    // Get EGL display - use default display for software rendering
-    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    const char *clientExtensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    const QByteArray clientExtensionsString = clientExtensions ? QByteArray(clientExtensions) : QByteArray();
+
+    EGLDisplay display = EGL_NO_DISPLAY;
+    if (clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_MESA_platform_surfaceless"))) {
+        using GetPlatformDisplayExtProc = EGLDisplay(EGLAPIENTRYP)(EGLenum platform, void *nativeDisplay, const EGLint *attribList);
+        auto getPlatformDisplay = reinterpret_cast<GetPlatformDisplayExtProc>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
+        if (getPlatformDisplay) {
+            display = getPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+            qInfo() << "Using surfaceless EGL platform";
+        }
+    }
+
+    if (display == EGL_NO_DISPLAY) {
+        qInfo() << "Using default EGL display";
+        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    }
     if (display == EGL_NO_DISPLAY) {
         qCritical() << "Failed to get EGL display";
         return false;
