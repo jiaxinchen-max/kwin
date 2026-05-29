@@ -18,6 +18,7 @@
 #include "opengl/glframebuffer.h"
 #include "utils/softwarevsyncmonitor.h"
 
+#include <QByteArray>
 #include <QDebug>
 #include <QFile>
 #include <QProcess>
@@ -419,13 +420,13 @@ AndroidEglBackend::AndroidEglBackend(AndroidBackend *backend)
     qInfo() << "Initializing Android EGL backend with Mesa rendering";
     
     // Detect best rendering mode
-    RenderingMode mode = detectBestRenderingMode();
-    m_mesaAvailable = (mode != RenderingMode::Fallback);
+    m_renderingMode = detectBestRenderingMode();
+    m_mesaAvailable = (m_renderingMode != RenderingMode::Fallback);
     
     if (!m_mesaAvailable) {
         qWarning() << "Mesa not available - EGL backend may not work";
     } else {
-        setupMesaRendering(mode);
+        setupMesaRendering(m_renderingMode);
     }
 }
 
@@ -463,12 +464,13 @@ void AndroidEglBackend::init()
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Initializing Android EGL backend with Mesa software rendering";
-    
-    // Set Mesa environment for software rendering
-    setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
-    setenv("GALLIUM_DRIVER", "llvmpipe", 1);
-    setenv("MESA_GL_VERSION_OVERRIDE", "3.0", 1);
+    qInfo() << "Initializing Android EGL backend";
+    if (!m_mesaAvailable) {
+        qCritical() << "Mesa is not available";
+        return false;
+    }
+
+    setupMesaRendering(m_renderingMode);
     
     // Get EGL display - use default display for software rendering
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -476,24 +478,7 @@ bool AndroidEglBackend::initializeEgl()
         qCritical() << "Failed to get EGL display";
         return false;
     }
-    
-    // Initialize EGL
-    EGLint major, minor;
-    if (!eglInitialize(display, &major, &minor)) {
-        EGLint error = eglGetError();
-        qCritical() << "eglInitialize failed:" << Qt::hex << error;
-        qCritical() << "Mesa software rendering may not be available";
-        return false;
-    }
-    
-    qInfo() << "EGL initialized with Mesa - version:" << major << "." << minor;
-    
-    // Bind OpenGL ES API
-    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-        qCritical() << "Failed to bind OpenGL ES API";
-        return false;
-    }
-    
+
     // Create EGL display wrapper
     auto eglDisplay = EglDisplay::create(display);
     if (!eglDisplay) {
@@ -502,58 +487,9 @@ bool AndroidEglBackend::initializeEgl()
     }
     
     setEglDisplay(eglDisplay.release());
-    
-    // Only create real EGL context for Mesa software rendering mode
-    // (VirtualGL mode already returned above)
-    
-    // Choose EGL config
-    const EGLint configAttribs[] = {
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_NONE
-    };
-    
-    EGLConfig config;
-    EGLint numConfigs;
-    if (!eglChooseConfig(display, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
-        qCritical() << "Failed to choose EGL config";
-        return false;
-    }
-    
-    // Create EGL context
-    const EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
-        EGL_NONE
-    };
-    
-    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttribs);
-    if (context == EGL_NO_CONTEXT) {
-        qCritical() << "Failed to create EGL context";
-        return false;
-    }
-    
-    // Create pbuffer surface for off-screen rendering
-    const EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE
-    };
-    
-    EGLSurface surface = eglCreatePbufferSurface(display, config, pbufferAttribs);
-    if (surface == EGL_NO_SURFACE) {
-        qCritical() << "Failed to create pbuffer surface";
-        eglDestroyContext(display, context);
-        return false;
-    }
-    
-    // Make context current
-    if (!eglMakeCurrent(display, surface, surface, context)) {
-        qCritical() << "Failed to make EGL context current";
-        eglDestroySurface(display, surface);
-        eglDestroyContext(display, context);
+
+    if (!createContext(EGL_NO_CONFIG_KHR) || !openglContext()->makeCurrent()) {
+        qCritical() << "Failed to create KWin EGL context";
         return false;
     }
     
@@ -758,8 +694,8 @@ bool AndroidEglBackend::checkPRootGPUAccess()
         }
     }
     
-    // Check if Vulkan can actually enumerate devices
-    return testVulkanDeviceEnumeration();
+    qInfo() << "PRoot: no accessible GPU device found";
+    return false;
 }
 
 bool AndroidEglBackend::testVulkanDeviceEnumeration()
@@ -797,6 +733,27 @@ bool AndroidEglBackend::testVulkanDeviceEnumeration()
 
 AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
 {
+    const QByteArray requestedMode = qgetenv("KWIN_ANDROID_GL_MODE").toLower();
+    if (requestedMode == "llvmpipe" || requestedMode == "software") {
+        qInfo() << "KWIN_ANDROID_GL_MODE requests llvmpipe";
+        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
+    }
+    if (requestedMode == "zink" || requestedMode == "hardware") {
+        qInfo() << "KWIN_ANDROID_GL_MODE requests zink";
+        return (isZinkAvailable() && isMesaAvailable()) ? RenderingMode::ZinkHardware : RenderingMode::Fallback;
+    }
+
+    const QByteArray mesaDriver = qgetenv("MESA_LOADER_DRIVER_OVERRIDE").toLower();
+    const QByteArray galliumDriver = qgetenv("GALLIUM_DRIVER").toLower();
+    if (mesaDriver == "llvmpipe" || mesaDriver == "swrast" || galliumDriver == "llvmpipe") {
+        qInfo() << "Existing Mesa environment requests llvmpipe";
+        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
+    }
+    if (mesaDriver == "zink" || galliumDriver == "zink") {
+        qInfo() << "Existing Mesa environment requests zink";
+        return (isZinkAvailable() && isMesaAvailable()) ? RenderingMode::ZinkHardware : RenderingMode::Fallback;
+    }
+
     // Priority order: Zink (hardware) > llvmpipe (software) > fallback
     
     if (isZinkAvailable() && isMesaAvailable()) {
@@ -815,6 +772,10 @@ AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
 
 void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
 {
+    // Android's compositor path uses OpenGL ES. Respect an explicit user value.
+    setenv("KWIN_COMPOSE", "O2ES", 0);
+    unsetenv("MESA_GLSL_VERSION_OVERRIDE");
+
     switch (mode) {
     case RenderingMode::ZinkHardware:
         qInfo() << "Configuring Mesa for Zink hardware acceleration";
@@ -823,7 +784,7 @@ void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
         setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 1);
         setenv("GALLIUM_DRIVER", "zink", 1);
         setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1);
-        setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
+        setenv("MESA_GLES_VERSION_OVERRIDE", "3.0", 1);
         
         // Enable hardware features
         unsetenv("LIBGL_ALWAYS_SOFTWARE");
@@ -843,8 +804,9 @@ void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
         setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
         setenv("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe", 1);
         setenv("GALLIUM_DRIVER", "llvmpipe", 1);
-        setenv("MESA_GL_VERSION_OVERRIDE", "2.1", 1);
-        setenv("MESA_GLSL_VERSION_OVERRIDE", "120", 1);
+        setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1);
+        setenv("MESA_GLES_VERSION_OVERRIDE", "3.0", 1);
+        unsetenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE");
         
         // Optimize software rendering
         setenv("MESA_NO_ERROR", "1", 1);

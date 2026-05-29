@@ -130,6 +130,7 @@ private:
     
     // Mesa detection
     bool m_mesaAvailable = false;
+    RenderingMode m_renderingMode = RenderingMode::Fallback;
 };
 
 } // namespace Android

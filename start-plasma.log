@@ -1,0 +1,128 @@
+=== Plasma Desktop with Hardware Accelerated KWin ===
+Logging to: /data/data/com.termux/files/usr/tmp/start-plasma.log
+Checking dependencies...
+✓ Found termux-render: /data/data/com.termux/files/usr/lib/libtermux-render.so
+✓ Mesa software rendering available
+
+⚠ Using Mesa software rendering
+
+Environment setup complete:
+  Acceleration: Mesa Software
+  Mesa driver: llvmpipe
+
+Starting D-Bus...
+Starting KWin with hardware acceleration...
+Using Android backend
+Accepting client connections on sockets: QList("wayland-0")
+Initializing Android Backend
+Connecting to termux display server...
+[2026-05-29 17:27:57] INFO  : setScreenConfig width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 17:27:57] INFO  : connectToRender start socket=/data/data/com.termux/files/home/tmp/termux-render type=SOCK_STREAM sizeof(lorieEvent)=32
+[2026-05-29 17:27:57] INFO  : Connected to render socket, event_fd=15 attempt=1/5
+[2026-05-29 17:27:57] INFO  : Created render event thread
+[2026-05-29 17:27:57] INFO  : Sent handshake magic length=11
+[2026-05-29 17:27:57] INFO  : Waiting for buffer initialization
+[2026-05-29 17:27:57] INFO  : Render blocking event loop started, event_fd=15 sizeof(lorieEvent)=32
+[2026-05-29 17:27:57] INFO  : Received event type=20 (EVENT_SERVER_VERIFY_SUCCEED)
+[2026-05-29 17:27:57] INFO  : Handling EVENT_SERVER_VERIFY_SUCCEED
+[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_BUFFER
+[2026-05-29 17:27:57] INFO  : Sent EVENT_SCREEN_SIZE width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 17:27:57] INFO  : Received event type=2 (EVENT_ADD_BUFFER)
+[2026-05-29 17:27:57] INFO  : Handling EVENT_ADD_BUFFER
+[2026-05-29 17:27:57] INFO  : Receiving LorieBuffer from socket fd=15 sizeof(LorieBuffer)=120 sizeof(desc)=40
+[2026-05-29 17:27:57] INFO  : Received raw LorieBuffer desc width=1024 stride=1024 height=768 format=2 type=2 id=0 fd=-1
+[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=16
+[2026-05-29 17:27:57] INFO  : Received LorieBuffer fd handle=16
+[2026-05-29 17:27:57] INFO  : LorieBuffer receive completed out=0xb400007d1466a8b0
+[2026-05-29 17:27:57] INFO  : Received buffer width=1024 stride=1024 height=768 format=2 type=2 id=0
+[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_SERVER_STATE
+[2026-05-29 17:27:57] INFO  : Received event type=1 (EVENT_SHARED_SERVER_STATE)
+[2026-05-29 17:27:57] INFO  : Handling EVENT_SHARED_SERVER_STATE
+[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 17:27:57] INFO  : Received shared server state fd=17
+[2026-05-29 17:27:57] INFO  : Mapped shared server state at 0x7c202a2000
+[2026-05-29 17:27:57] INFO  : Sent EVENT_APPLY_EVENT_FD
+[2026-05-29 17:27:57] INFO  : Received event type=19 (EVENT_SHARED_EVENT_FD)
+[2026-05-29 17:27:57] INFO  : Handling EVENT_SHARED_EVENT_FD
+[2026-05-29 17:27:57] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 17:27:57] INFO  : Received input event fd=17
+[2026-05-29 17:27:57] INFO  : Sent EVENT_CLIENT_VERIFY_SUCCEED
+[2026-05-29 17:27:57] INFO  : Buffer initialization completed
+Connected to display server
+Buffer size: 1024 x 768 type: 2 format: 2
+Android Backend initialized successfully
+Creating Android EGL backend
+Initializing Android EGL backend with Mesa rendering
+Environment detection:
+  PRoot: true
+  Container: false
+  Plain Termux: false
+Vulkan found 19 extensions - GPU may be accessible
+PRoot: GPU access available - Zink may work
+Mesa library detected
+Zink hardware acceleration available
+Configuring Mesa for Zink hardware acceleration
+Zink hardware acceleration configured
+GALLIUM_DRIVER= zink
+Mesa rendering mode configured successfully
+Initializing Android EGL backend
+Initializing Android EGL backend with Mesa software rendering
+eglInitialize failed: 3001
+Mesa software rendering may not be available
+kwin_scene_opengl: Creating the OpenGL rendering failed:  "Failed to initialize EGL"
+Destroying Android EGL backend
+Creating Android QPainter backend
+Initializing Android QPainter backend
+Adding output to QPainter backend: "AndroidScreen-0"
+Created AndroidQPainterLayer for output "AndroidScreen-0"
+Android QPainter backend initialized with 1 layers
+kwin_core: Failed to load cursor theme "default"
+kwin_core: Failed to load cursor theme "default"
+qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
+Starting Plasma components...
+⚠ kdeinit not found, skipping
+Starting kactivitymanagerd: /data/data/com.termux/files/usr/lib/libexec/kactivitymanagerd
+qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
+QDBusObjectPath: invalid path "/modules/wpad-detector"
+kf.dbusaddons: The kded module name "wpad-detector" is invalid!
+kf.solid.backends.fstab: Failed to acquire watch file descriptor No such file or directory
+Could not load a session backend. Session management operations such as shutdown will not be operational. This is a setup issue.
+kf.package: Could not find required file "mainscript" for package "/data/data/com.termux/files/usr/share/plasma/plasmoids/org.kde.plasma.icontasks/" should be QList("ui/main.qml")
+qt.qml.propertyCache.append: Member visible of the object PlasmaQuick::Dialog overrides a member of the base object. Consider renaming it or adding final or override specifier
+qt.qml.propertyCache.append: Member enabled of the object DeclarativeDropArea overrides a member of the base object. Consider renaming it or adding final or override specifier
+qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
+
+✓ Plasma Desktop started with hardware accelerated KWin
+✓ Acceleration mode: Mesa Software
+✓ AHardwareBuffer zero-copy rendering supported
+
+Launch applications:
+  konsole    # Terminal
+  dolphin    # File manager
+  kate       # Text editor
+
+Usage:
+  ./start-plasma.sh                # Start Plasma (normal)
+  ./start-plasma.sh --install-deps # Install dependencies first
+
+Press Ctrl+C to stop...
+kf.solid.backends.fstab: Failed to acquire watch file descriptor No such file or directory
+QDBusObjectPath: invalid path "/modules/oom-notifier"
+kf.dbusaddons: The kded module name "oom-notifier" is invalid!
+Could not load a session backend. Session management operations such as shutdown will not be operational. This is a setup issue.
+QDBusObjectPath: invalid path "/modules/plasma-session-shortcuts"
+kf.dbusaddons: The kded module name "plasma-session-shortcuts" is invalid!
+qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
+org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
+org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400006e3d0ee810
+org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400006e3d0ef710
+org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400006e3d0ef710
+org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400006e3d0f0d90
+Registering ":1.9/StatusNotifierItem" to system tray
+org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
+Destroying Android QPainter backend
+Destroyed AndroidQPainterLayer
+[2026-05-29 17:28:56] ERROR : Connection closed
+[2026-05-29 17:28:56] ERROR : Render event loop cleanup, buffer_ready=1 event_fd=15 conn_fd=17
+Failed to write to the pipe: Bad file descriptor.
+Failed to write to the pipe: Bad file descriptor.
