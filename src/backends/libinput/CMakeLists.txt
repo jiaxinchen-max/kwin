@@ -22,17 +22,4 @@ target_sources(kwin PRIVATE
     libinput_logging.cpp
     libinputbackend.cpp
 )
-# Link termux-render for get_conn_fd() function used in context.cpp
-find_path(TERMUX_RENDER_INCLUDE_DIR
-    NAMES termux/render/render.h
-    HINTS
-        ${CMAKE_INSTALL_PREFIX}/include
-        /data/data/com.termux/files/usr/include
-)
-find_library(TERMUX_RENDER_LIB NAMES termux-render REQUIRED)
-if (TERMUX_RENDER_INCLUDE_DIR)
-    target_include_directories(kwin PRIVATE ${TERMUX_RENDER_INCLUDE_DIR})
-endif()
-target_link_libraries(kwin PRIVATE ${TERMUX_RENDER_LIB})
-
 target_link_libraries(kwin PRIVATE Libinput::Libinput)

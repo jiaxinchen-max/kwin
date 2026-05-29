@@ -13,11 +13,12 @@
 #include "core/session.h"
 #include "utils/udev.h"
 
-// Always include for Termux builds (don't rely on __ANDROID__ macro).
+#if defined(__ANDROID__) || defined(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
 // The installed termux-render headers are C headers and may not provide C++ linkage guards.
 extern "C" {
 #include <termux/render/render.h>
 }
+#endif
 
 #include <fcntl.h>
 #include <unistd.h>
