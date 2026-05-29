@@ -16,38 +16,38 @@ Using Android backend
 Accepting client connections on sockets: QList("wayland-0")
 Initializing Android Backend
 Connecting to termux display server...
-[2026-05-29 17:55:02] INFO  : setScreenConfig width=1024 height=768 framerate=30 format=2 type=2
-[2026-05-29 17:55:02] INFO  : connectToRender start socket=/data/data/com.termux/files/home/tmp/termux-render type=SOCK_STREAM sizeof(lorieEvent)=32
-[2026-05-29 17:55:02] INFO  : Connected to render socket, event_fd=15 attempt=1/5
-[2026-05-29 17:55:02] INFO  : Created render event thread
-[2026-05-29 17:55:02] INFO  : Sent handshake magic length=11
-[2026-05-29 17:55:02] INFO  : Waiting for buffer initialization
-[2026-05-29 17:55:02] INFO  : Render blocking event loop started, event_fd=15 sizeof(lorieEvent)=32
-[2026-05-29 17:55:02] INFO  : Received event type=20 (EVENT_SERVER_VERIFY_SUCCEED)
-[2026-05-29 17:55:02] INFO  : Handling EVENT_SERVER_VERIFY_SUCCEED
-[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_BUFFER
-[2026-05-29 17:55:02] INFO  : Sent EVENT_SCREEN_SIZE width=1024 height=768 framerate=30 format=2 type=2
-[2026-05-29 17:55:02] INFO  : Received event type=2 (EVENT_ADD_BUFFER)
-[2026-05-29 17:55:02] INFO  : Handling EVENT_ADD_BUFFER
-[2026-05-29 17:55:02] INFO  : Receiving LorieBuffer from socket fd=15 sizeof(LorieBuffer)=120 sizeof(desc)=40
-[2026-05-29 17:55:02] INFO  : Received raw LorieBuffer desc width=1366 stride=1366 height=768 format=2 type=2 id=1 fd=-1
-[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=16
-[2026-05-29 17:55:02] INFO  : Received LorieBuffer fd handle=16
-[2026-05-29 17:55:02] INFO  : LorieBuffer receive completed out=0xb400006fb6b853a0
-[2026-05-29 17:55:02] INFO  : Received buffer width=1366 stride=1366 height=768 format=2 type=2 id=1
-[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_SERVER_STATE
-[2026-05-29 17:55:02] INFO  : Received event type=1 (EVENT_SHARED_SERVER_STATE)
-[2026-05-29 17:55:02] INFO  : Handling EVENT_SHARED_SERVER_STATE
-[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=17
-[2026-05-29 17:55:02] INFO  : Received shared server state fd=17
-[2026-05-29 17:55:02] INFO  : Mapped shared server state at 0x6ec26de000
-[2026-05-29 17:55:02] INFO  : Sent EVENT_APPLY_EVENT_FD
-[2026-05-29 17:55:02] INFO  : Received event type=19 (EVENT_SHARED_EVENT_FD)
-[2026-05-29 17:55:02] INFO  : Handling EVENT_SHARED_EVENT_FD
-[2026-05-29 17:55:02] INFO  : ancil_recv_fd sock=15 fd=17
-[2026-05-29 17:55:02] INFO  : Received input event fd=17
-[2026-05-29 17:55:02] INFO  : Sent EVENT_CLIENT_VERIFY_SUCCEED
-[2026-05-29 17:55:02] INFO  : Buffer initialization completed
+[2026-05-29 18:07:41] INFO  : setScreenConfig width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 18:07:41] INFO  : connectToRender start socket=/data/data/com.termux/files/home/tmp/termux-render type=SOCK_STREAM sizeof(lorieEvent)=32
+[2026-05-29 18:07:41] INFO  : Connected to render socket, event_fd=15 attempt=1/5
+[2026-05-29 18:07:41] INFO  : Created render event thread
+[2026-05-29 18:07:41] INFO  : Sent handshake magic length=11
+[2026-05-29 18:07:41] INFO  : Waiting for buffer initialization
+[2026-05-29 18:07:41] INFO  : Render blocking event loop started, event_fd=15 sizeof(lorieEvent)=32
+[2026-05-29 18:07:41] INFO  : Received event type=20 (EVENT_SERVER_VERIFY_SUCCEED)
+[2026-05-29 18:07:41] INFO  : Handling EVENT_SERVER_VERIFY_SUCCEED
+[2026-05-29 18:07:41] INFO  : Sent EVENT_APPLY_BUFFER
+[2026-05-29 18:07:41] INFO  : Sent EVENT_SCREEN_SIZE width=1024 height=768 framerate=30 format=2 type=2
+[2026-05-29 18:07:41] INFO  : Received event type=2 (EVENT_ADD_BUFFER)
+[2026-05-29 18:07:41] INFO  : Handling EVENT_ADD_BUFFER
+[2026-05-29 18:07:41] INFO  : Receiving LorieBuffer from socket fd=15 sizeof(LorieBuffer)=120 sizeof(desc)=40
+[2026-05-29 18:07:41] INFO  : Received raw LorieBuffer desc width=1366 stride=1366 height=768 format=2 type=2 id=2 fd=-1
+[2026-05-29 18:07:41] INFO  : ancil_recv_fd sock=15 fd=16
+[2026-05-29 18:07:41] INFO  : Received LorieBuffer fd handle=16
+[2026-05-29 18:07:41] INFO  : LorieBuffer receive completed out=0xb4000077341a0f20
+[2026-05-29 18:07:41] INFO  : Received buffer width=1366 stride=1366 height=768 format=2 type=2 id=2
+[2026-05-29 18:07:41] INFO  : Sent EVENT_APPLY_SERVER_STATE
+[2026-05-29 18:07:41] INFO  : Received event type=1 (EVENT_SHARED_SERVER_STATE)
+[2026-05-29 18:07:41] INFO  : Handling EVENT_SHARED_SERVER_STATE
+[2026-05-29 18:07:41] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 18:07:41] INFO  : Received shared server state fd=17
+[2026-05-29 18:07:41] INFO  : Mapped shared server state at 0x763fd81000
+[2026-05-29 18:07:41] INFO  : Sent EVENT_APPLY_EVENT_FD
+[2026-05-29 18:07:41] INFO  : Received event type=19 (EVENT_SHARED_EVENT_FD)
+[2026-05-29 18:07:41] INFO  : Handling EVENT_SHARED_EVENT_FD
+[2026-05-29 18:07:41] INFO  : ancil_recv_fd sock=15 fd=17
+[2026-05-29 18:07:41] INFO  : Received input event fd=17
+[2026-05-29 18:07:41] INFO  : Sent EVENT_CLIENT_VERIFY_SUCCEED
+[2026-05-29 18:07:41] INFO  : Buffer initialization completed
 Connected to display server
 Buffer size: 1366 x 768 type: 2 format: 2
 Android Backend initialized successfully
@@ -65,64 +65,15 @@ Configuring Mesa for llvmpipe software rendering
 Mesa software rendering configured
 LIBGL_ALWAYS_SOFTWARE= 1
 Mesa rendering mode configured successfully
-kwin_scene_opengl: eglInitialize failed
-kwin_scene_opengl: Error during eglInitialize  "EGL_NOT_INITIALIZED"
-Failed to create EglDisplay
-kwin_scene_opengl: Creating the OpenGL rendering failed:  "Failed to initialize EGL"
-Destroying Android EGL backend
-kwin_core: Could not fulfill the requested compositing mode in KWIN_COMPOSE: 1 . Exiting.
-Creating Android QPainter backend
-Initializing Android QPainter backend
-Adding output to QPainter backend: "AndroidScreen-0"
-Created AndroidQPainterLayer for output "AndroidScreen-0"
-Android QPainter backend initialized with 1 layers
-kwin_core: Failed to load cursor theme "default"
-kwin_core: Failed to load cursor theme "default"
-qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
-Starting Plasma components...
-⚠ kdeinit not found, skipping
-Starting kactivitymanagerd: /data/data/com.termux/files/usr/lib/libexec/kactivitymanagerd
-qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
-QDBusObjectPath: invalid path "/modules/wpad-detector"
-kf.dbusaddons: The kded module name "wpad-detector" is invalid!
-kf.solid.backends.fstab: Failed to acquire watch file descriptor No such file or directory
-Could not load a session backend. Session management operations such as shutdown will not be operational. This is a setup issue.
-kf.package: Could not find required file "mainscript" for package "/data/data/com.termux/files/usr/share/plasma/plasmoids/org.kde.plasma.icontasks/" should be QList("ui/main.qml")
-qt.qml.propertyCache.append: Member visible of the object PlasmaQuick::Dialog overrides a member of the base object. Consider renaming it or adding final or override specifier
-qt.qml.propertyCache.append: Member enabled of the object DeclarativeDropArea overrides a member of the base object. Consider renaming it or adding final or override specifier
-qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
-
-✓ Plasma Desktop started with hardware accelerated KWin
-✓ Acceleration mode: Mesa Software
-✓ AHardwareBuffer zero-copy rendering supported
-
-Launch applications:
-  konsole    # Terminal
-  dolphin    # File manager
-  kate       # Text editor
-
-Usage:
-  /data/data/com.termux/files/usr/bin/start-plasma                # Start Plasma (normal)
-  /data/data/com.termux/files/usr/bin/start-plasma --install-deps # Install dependencies first
-
-Press Ctrl+C to stop...
-kf.solid.backends.fstab: Failed to acquire watch file descriptor No such file or directory
-QDBusObjectPath: invalid path "/modules/oom-notifier"
-kf.dbusaddons: The kded module name "oom-notifier" is invalid!
-Could not load a session backend. Session management operations such as shutdown will not be operational. This is a setup issue.
-QDBusObjectPath: invalid path "/modules/plasma-session-shortcuts"
-kf.dbusaddons: The kded module name "plasma-session-shortcuts" is invalid!
-qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.ServiceUnknown", "The name org.freedesktop.portal.Desktop was not provided by any .service files")
-org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
-org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400007df11474d0
-org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400007df11489d0
-org.kde.plasma.kicker: Entry is not valid "org.kde.kontact.desktop" 0xb400007df11489d0
-org.kde.plasma.kicker: Entry is not valid "org.kde.discover.desktop" 0xb400007df1148c10
-Registering ":1.9/StatusNotifierItem" to system tray
-org.kde.pulseaudio: No object for name "OpenSL_ES_sink.monitor"
-Destroying Android QPainter backend
-Destroyed AndroidQPainterLayer
-[2026-05-29 17:56:11] ERROR : Connection closed
-[2026-05-29 17:56:11] ERROR : Render event loop cleanup, buffer_ready=1 event_fd=15 conn_fd=17
-Failed to write to the pipe: Bad file descriptor.
-Failed to write to the pipe: Bad file descriptor.
+Using surfaceless EGL platform
+kwin_core: Failed to open drm node: ""
+kwin_scene_opengl: couldn't find dev node for drm device 
+Mesa EGL context created and made current
+OpenGL Vendor: Mesa
+OpenGL Renderer: llvmpipe (LLVM 21.1.8, 128 bits)
+OpenGL Version: OpenGL ES 3.0 Mesa 26.0.6
+Adding output to EGL backend: "AndroidScreen-0"
+Created AndroidEglLayer for output "AndroidScreen-0"
+Android EGL backend initialized with 1 layers
+/data/data/com.termux/files/usr/bin/start-plasma: line 253: 13051 Segmentation fault         kwin_wayland --socket "$KWIN_WAYLAND_SOCKET" --xwayland --no-global-shortcuts
+✗ Error: kwin_wayland exited during startup
