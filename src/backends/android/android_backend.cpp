@@ -76,7 +76,66 @@ static std::chrono::microseconds currentInputTime()
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 }
 
-// Use the keycode conversion table from termux/render/render.h.
+enum class KeycodeMode {
+    Xkb,
+    Android,
+    Evdev,
+};
+
+static KeycodeMode requestedKeycodeMode()
+{
+    const QByteArray mode = qgetenv("KWIN_ANDROID_KEYCODE_MODE").toLower();
+    if (mode == "android") {
+        return KeycodeMode::Android;
+    }
+    if (mode == "evdev" || mode == "linux") {
+        return KeycodeMode::Evdev;
+    }
+    return KeycodeMode::Xkb;
+}
+
+static QString keycodeModeName(KeycodeMode mode)
+{
+    switch (mode) {
+    case KeycodeMode::Xkb:
+        return QStringLiteral("xkb");
+    case KeycodeMode::Android:
+        return QStringLiteral("android");
+    case KeycodeMode::Evdev:
+        return QStringLiteral("evdev");
+    }
+    Q_UNREACHABLE_RETURN(QStringLiteral("xkb"));
+}
+
+static int androidKeycodeToLinux(uint16_t keycode)
+{
+    if (keycode < 304 && android_to_linux_keycode[keycode] != 0) {
+        return android_to_linux_keycode[keycode];
+    }
+    return 0;
+}
+
+static int lorieKeyToLinux(uint16_t keycode)
+{
+    // Current termux-render sends XKB keycodes; older code paths can still be forced with the env var.
+    switch (requestedKeycodeMode()) {
+    case KeycodeMode::Android: {
+        const int linuxKeycode = androidKeycodeToLinux(keycode);
+        return linuxKeycode != 0 ? linuxKeycode : keycode;
+    }
+    case KeycodeMode::Evdev:
+        return keycode;
+    case KeycodeMode::Xkb:
+        if (keycode >= 8) {
+            return keycode - 8;
+        }
+        if (const int linuxKeycode = androidKeycodeToLinux(keycode); linuxKeycode != 0) {
+            return linuxKeycode;
+        }
+        return keycode;
+    }
+    Q_UNREACHABLE_RETURN(keycode);
+}
 
 AndroidBackend::AndroidBackend(QObject *parent)
     : OutputBackend(parent)
@@ -282,6 +341,7 @@ QString AndroidBackend::supportInformation() const
     QString support = QStringLiteral("Name: Android\n");
     support.append(QStringLiteral("Output: %1x%2@%3Hz\n").arg(m_width).arg(m_height).arg(m_refreshRate));
     support.append(QStringLiteral("Buffer: AHardwareBuffer\n"));
+    support.append(QStringLiteral("Keycode mode: %1\n").arg(keycodeModeName(requestedKeycodeMode())));
     return support;
 }
 
@@ -389,13 +449,7 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         if (!m_keyboardDevice) break;
         
         const auto &key = e.key;
-        int linuxKeycode = key.key;
-        
-        // Convert Android keycode to Linux keycode if needed.
-        // android_to_linux_keycode is a static table from termux/render/render.h.
-        if (key.key < 304 && android_to_linux_keycode[key.key] != 0) {
-            linuxKeycode = android_to_linux_keycode[key.key];
-        }
+        const int linuxKeycode = lorieKeyToLinux(key.key);
         
         KeyboardKeyState state = key.state ? KeyboardKeyState::Pressed : KeyboardKeyState::Released;
         Q_EMIT m_keyboardDevice->keyChanged(linuxKeycode, state, std::chrono::milliseconds(0), m_keyboardDevice);
