@@ -148,7 +148,8 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
             lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
             serverState->waitForNextFrame = false;
             serverState->drawRequested = 1;
-            pthread_cond_signal(&serverState->cond);
+            if (rendererCond)
+                pthread_cond_signal(rendererCond);
             lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
             
             qDebug() << "Direct rendering frame completed - zero copy";
@@ -166,7 +167,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
                 qCritical() << "Failed to get server state";
                 return true;
             }
-            
+
             // Lock the shared buffer
             void *shared_buffer;
             lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
@@ -176,34 +177,34 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
                 lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
                 return true;
             }
-            
+
             // Get buffer description
             const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
             if (desc && shared_buffer) {
                 // Bind our framebuffer to read from it
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
-                
+
                 // Read pixels directly into the shared buffer
                 glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                
-                ret = LorieBuffer_unlock((LorieBuffer*)m_buffer);
-                if (ret != 0) {
-                    qCritical() << "Failed to flush LorieBuffer";
-                    lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
-                    return true;
-                }
 
                 serverState->waitForNextFrame = false;
                 serverState->drawRequested = 1;
-                pthread_cond_signal(&serverState->cond);
-                
+                if (rendererCond)
+                    pthread_cond_signal(rendererCond);
+                lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+
+                ret = LorieBuffer_unlock((LorieBuffer*)m_buffer);
+                if (ret != 0) {
+                    qCritical() << "Failed to flush LorieBuffer";
+                    return true;
+                }
+
                 qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
             } else {
                 LorieBuffer_unlock((LorieBuffer*)m_buffer);
+                lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
             }
-            
-            lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
         }
     }
     

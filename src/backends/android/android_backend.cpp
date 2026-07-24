@@ -12,6 +12,8 @@
 #include "android_output.h"
 #include "core/session.h"
 #include "input.h"
+#include "keyboard_input.h"
+#include "xkb.h"
 
 #include <QSocketNotifier>
 #include <algorithm>
@@ -91,7 +93,7 @@ static KeycodeMode requestedKeycodeMode()
     if (mode == "evdev" || mode == "linux") {
         return KeycodeMode::Evdev;
     }
-    return KeycodeMode::Xkb;
+    return KeycodeMode::Evdev;
 }
 
 static QString keycodeModeName(KeycodeMode mode)
@@ -117,7 +119,6 @@ static int androidKeycodeToLinux(uint16_t keycode)
 
 static int lorieKeyToLinux(uint16_t keycode)
 {
-    // Current termux-render sends XKB keycodes; older code paths can still be forced with the env var.
     switch (requestedKeycodeMode()) {
     case KeycodeMode::Android: {
         const int linuxKeycode = androidKeycodeToLinux(keycode);
@@ -135,6 +136,44 @@ static int lorieKeyToLinux(uint16_t keycode)
         return keycode;
     }
     Q_UNREACHABLE_RETURN(keycode);
+}
+
+static void sendKey(AndroidInputDevice *device, quint32 keycode, KeyboardKeyState state)
+{
+    Q_EMIT device->keyChanged(keycode, state, std::chrono::milliseconds(0), device);
+}
+
+static void sendUnicodeKey(AndroidInputDevice *device, uint32_t codepoint)
+{
+    if (!input() || !input()->keyboard()) {
+        return;
+    }
+
+    Xkb *xkb = input()->keyboard()->xkb();
+    const xkb_keysym_t keysym = xkb_utf32_to_keysym(codepoint);
+    if (keysym == XKB_KEY_NoSymbol) {
+        return;
+    }
+
+    const std::optional<Xkb::KeyCode> keyCode = xkb->keycodeFromKeysym(keysym);
+    if (!keyCode) {
+        qWarning() << "Could not map Android unicode input to keycode:" << codepoint;
+        return;
+    }
+
+    xkb_state *state = xkb->state();
+    if (!state) {
+        return;
+    }
+    const xkb_mod_mask_t formerDepressed = xkb_state_serialize_mods(state, XKB_STATE_MODS_DEPRESSED);
+    const xkb_mod_mask_t formerLatched = xkb_state_serialize_mods(state, XKB_STATE_MODS_LATCHED);
+    const xkb_mod_mask_t formerLocked = xkb_state_serialize_mods(state, XKB_STATE_MODS_LOCKED);
+    const xkb_layout_index_t formerLayout = xkb_state_serialize_layout(state, XKB_STATE_LAYOUT_EFFECTIVE);
+
+    xkb->updateModifiers(keyCode->modifiers, 0, 0, formerLayout);
+    sendKey(device, keyCode->keyCode, KeyboardKeyState::Pressed);
+    sendKey(device, keyCode->keyCode, KeyboardKeyState::Released);
+    xkb->updateModifiers(formerDepressed, formerLatched, formerLocked, formerLayout);
 }
 
 AndroidBackend::AndroidBackend(QObject *parent)
@@ -233,6 +272,7 @@ bool AndroidBackend::connectToDisplayServer()
     const int bufferType = requestedLorieBufferType();
     setScreenConfig(m_width, m_height, m_refreshRate,
                     AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM, bufferType);
+    setKeycodeFormat(LORIE_KEYCODE_EVDEV);
 
     const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
     const bool hadWaylandDisplay = qEnvironmentVariableIsSet("WAYLAND_DISPLAY");
@@ -452,7 +492,14 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         const int linuxKeycode = lorieKeyToLinux(key.key);
         
         KeyboardKeyState state = key.state ? KeyboardKeyState::Pressed : KeyboardKeyState::Released;
-        Q_EMIT m_keyboardDevice->keyChanged(linuxKeycode, state, std::chrono::milliseconds(0), m_keyboardDevice);
+        sendKey(m_keyboardDevice, linuxKeycode, state);
+        break;
+    }
+
+    case EVENT_UNICODE: {
+        if (!m_keyboardDevice) break;
+
+        sendUnicodeKey(m_keyboardDevice, e.unicode.code);
         break;
     }
     

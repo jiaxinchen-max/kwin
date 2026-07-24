@@ -80,6 +80,18 @@ bool AndroidQPainterLayer::flushBuffer()
         m_buffer = nullptr;
         return false;
     }
+
+    // Signal the renderer that a new frame is ready
+    struct lorie_shared_server_state *serverState = m_backend->androidBackend()->serverState();
+    if (serverState) {
+        lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
+        serverState->waitForNextFrame = false;
+        serverState->drawRequested = 1;
+        if (rendererCond)
+            pthread_cond_signal(rendererCond);
+        lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+    }
+
     return true;
 }
 
