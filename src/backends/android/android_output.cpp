@@ -65,20 +65,10 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     Q_UNUSED(frame)
     
     if (auto layer = dynamic_cast<AndroidQPainterLayer *>(m_outputLayer)) {
-        lorie_shared_server_state *state = m_backend->serverState();
-        if (state) {
-            if (!layer->flushBuffer()) {
-                return true;
-            }
-
-            lorie_mutex_lock(&state->lock, &state->lockingPid);
-            state->waitForNextFrame = false;
-            state->drawRequested = 1;
-            pthread_cond_signal(&state->cond);
-            lorie_mutex_unlock(&state->lock, &state->lockingPid);
-
+        if (!layer->flushBuffer()) {
             return true;
         }
+        return true;
     }
 
     // Signal the termux-app display server even if no software layer image is available.
@@ -86,7 +76,8 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     // if (state) {
     //     lorie_mutex_lock(&state->lock, &state->lockingPid);
     //     state->drawRequested = 1;
-    //     pthread_cond_signal(&state->cond);
+    //     if (rendererCond)
+    //         pthread_cond_signal(rendererCond);
     //     lorie_mutex_unlock(&state->lock, &state->lockingPid);
     //     return true;
     // }
