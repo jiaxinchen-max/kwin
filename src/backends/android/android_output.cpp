@@ -66,22 +66,14 @@ bool AndroidOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
     
     if (auto layer = dynamic_cast<AndroidQPainterLayer *>(m_outputLayer)) {
         if (!layer->flushBuffer()) {
-            return true;
+            return false;
         }
         return true;
     }
 
-    // Signal the termux-app display server even if no software layer image is available.
-    // lorie_shared_server_state *state = m_backend->serverState();
-    // if (state) {
-    //     lorie_mutex_lock(&state->lock, &state->lockingPid);
-    //     state->drawRequested = 1;
-    //     if (rendererCond)
-    //         pthread_cond_signal(rendererCond);
-    //     lorie_mutex_unlock(&state->lock, &state->lockingPid);
-    //     return true;
-    // }
-    return false;
+    // EGL presentation is completed by AndroidEglLayer::doEndFrame(), which
+    // synchronizes the AHardwareBuffer and wakes the termux-render consumer.
+    return m_outputLayer != nullptr;
 }
 
 RenderLoop *AndroidOutput::renderLoop() const

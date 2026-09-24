@@ -200,6 +200,13 @@ QByteArray ShaderManager::generateFragmentSource(ShaderTraits traits) const
         stream << "    result = geometryColor * (1.0 - clamp(0.5 + f / df, 0.0, 1.0));\n";
     }
 
+    if (traits & ShaderTrait::SwapRedBlue) {
+        stream << "    result = result.bgra;\n";
+    }
+    if (traits & ShaderTrait::ForceOpaque) {
+        stream << "    result.a = 1.0;\n";
+    }
+
     if (traits & ShaderTrait::YuvConversion) {
         stream << "result.rgb = (yuvToRgb * vec4(result.rgb, 1.0)).rgb;";
     }

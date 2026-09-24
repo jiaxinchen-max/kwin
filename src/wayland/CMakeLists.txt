@@ -83,6 +83,14 @@ ecm_add_qtwayland_server_protocol_kde(WaylandProtocols_xml
         ${WaylandProtocols_DATADIR}/unstable/xwayland-keyboard-grab/xwayland-keyboard-grab-unstable-v1.xml
 )
 
+if (KWIN_BUILD_ANDROID_AHARDWAREBUFFER)
+    ecm_add_qtwayland_server_protocol_kde(WaylandProtocols_xml
+        PRIVATE_CODE
+        FILES
+            ${PROJECT_SOURCE_DIR}/src/wayland/protocols/termux-ahardware-buffer-v1.xml
+    )
+endif()
+
 target_sources(kwin PRIVATE
     abstract_data_source.cpp
     abstract_drop_handler.cpp
@@ -179,6 +187,10 @@ target_sources(kwin PRIVATE
     xwaylandshell_v1.cpp
     xxpip_v1.cpp
 )
+
+if (KWIN_BUILD_ANDROID_AHARDWAREBUFFER)
+    target_sources(kwin PRIVATE androidhardwarebuffer.cpp)
+endif()
 
 install(FILES
     alphamodifier_v1.h

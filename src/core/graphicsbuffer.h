@@ -48,6 +48,17 @@ struct SinglePixelAttributes
     uint32_t alpha;
 };
 
+struct AndroidHardwareBufferAttributes
+{
+    // Kept opaque so the core graphics buffer API doesn't depend on Android
+    // headers on non-Android platforms.
+    void *buffer = nullptr;
+    uint32_t format = 0;
+    uint32_t stride = 0;
+    uint64_t usage = 0;
+    uint32_t flags = 0;
+};
+
 /**
  * The GraphicsBuffer class represents a chunk of memory containing graphics data.
  *
@@ -90,6 +101,7 @@ public:
     virtual const DmaBufAttributes *dmabufAttributes() const;
     virtual const ShmAttributes *shmAttributes() const;
     virtual const SinglePixelAttributes *singlePixelAttributes() const;
+    virtual const AndroidHardwareBufferAttributes *androidHardwareBufferAttributes() const;
 
     /**
      * the added release point will be referenced as long as this buffer is referenced

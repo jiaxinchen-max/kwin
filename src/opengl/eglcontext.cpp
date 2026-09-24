@@ -228,6 +228,11 @@ static inline bool shouldUseOpenGLES()
 
     std::vector<std::unique_ptr<AbstractOpenGLContextAttributeBuilder>> candidates;
     if (shouldUseOpenGLES()) {
+        if (qgetenv("KWIN_ANDROID_GL_MODE").compare("system", Qt::CaseInsensitive) == 0) {
+            auto gles3 = std::make_unique<EglOpenGLESContextAttributeBuilder>();
+            gles3->setVersion(3);
+            candidates.push_back(std::move(gles3));
+        }
         if (haveCreateContext && haveRobustness && haveContextPriority && haveResetOnVideoMemoryPurge) {
             auto glesRobustPriority = std::make_unique<EglOpenGLESContextAttributeBuilder>();
             glesRobustPriority->setResetOnVideoMemoryPurge(true);
@@ -482,7 +487,7 @@ bool EglContext::checkSupported() const
     const bool supportsNonPowerOfTwoTextures = m_isOpenglES || hasOpenglExtension("GL_ARB_texture_non_power_of_two");
     const bool supports3DTextures = !m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension("GL_OES_texture_3D");
     const bool supportsFBOs = m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension("GL_ARB_framebuffer_object") || hasOpenglExtension(QByteArrayLiteral("GL_EXT_framebuffer_object"));
-    const bool supportsUnpack = !m_isOpenglES || hasOpenglExtension(QByteArrayLiteral("GL_EXT_unpack_subimage"));
+    const bool supportsUnpack = !m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension(QByteArrayLiteral("GL_EXT_unpack_subimage"));
 
     if (!supportsGLSL || !supportsNonPowerOfTwoTextures || !supports3DTextures || !supportsFBOs || !supportsUnpack) {
         return false;

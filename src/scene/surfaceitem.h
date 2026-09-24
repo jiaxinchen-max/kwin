@@ -148,6 +148,8 @@ public:
     void update(const Region &region) override;
     bool isValid() const override;
     bool isFloatingPoint() const;
+    bool needsRedBlueSwap() const;
+    bool needsForceOpaque() const;
 
     OpenGLSurfaceContents texture() const;
 
@@ -156,6 +158,8 @@ private:
     void updateShmTexture(GraphicsBuffer *buffer, const Region &region);
     bool loadDmabufTexture(GraphicsBuffer *buffer);
     void updateDmabufTexture(GraphicsBuffer *buffer);
+    bool loadAndroidHardwareBufferTexture(GraphicsBuffer *buffer);
+    void updateAndroidHardwareBufferTexture(GraphicsBuffer *buffer);
     bool loadSinglePixelTexture(GraphicsBuffer *buffer);
     void updateSinglePixelTexture(GraphicsBuffer *buffer);
     void destroy();
@@ -164,11 +168,14 @@ private:
         None,
         Shm,
         DmaBuf,
+        AndroidHardwareBuffer,
         SinglePixel,
     };
 
     BufferType m_bufferType = BufferType::None;
     bool m_isFloatingPoint = false;
+    bool m_needsRedBlueSwap = false;
+    bool m_needsForceOpaque = false;
     EglBackend *m_backend;
     SurfaceItem *m_item;
     OpenGLSurfaceContents m_texture;

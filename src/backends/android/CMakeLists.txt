@@ -17,3 +17,13 @@ install(PROGRAMS start-plasma.sh
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     RENAME start-plasma
 )
+
+install(PROGRAMS android-rendering-env.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kwin-android-rendering-env
+)
+
+install(PROGRAMS start-kwin-x11-zink.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kwin-x11-zink
+)

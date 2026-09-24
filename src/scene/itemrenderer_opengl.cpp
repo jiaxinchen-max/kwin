@@ -233,6 +233,12 @@ void ItemRendererOpenGL::createRenderNode(Item *item, RenderContext *context, co
                     .hasFloatingPointColor = texture->isFloatingPoint(),
                 });
                 renderNode.geometry.postProcessTextureCoordinates(texture->texture().planes.at(0)->matrix(UnnormalizedCoordinates));
+                if (texture->needsRedBlueSwap()) {
+                    renderNode.traits |= ShaderTrait::SwapRedBlue;
+                }
+                if (texture->needsForceOpaque()) {
+                    renderNode.traits |= ShaderTrait::ForceOpaque;
+                }
                 if (surfaceItem->colorDescription()->yuvCoefficients() != YUVMatrixCoefficients::Identity) {
                     renderNode.traits |= ShaderTrait::YuvConversion;
                 }

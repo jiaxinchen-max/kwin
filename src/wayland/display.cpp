@@ -14,6 +14,9 @@
 #include "output.h"
 #include "shmclientbuffer_p.h"
 #include "singlepixelbuffer.h"
+#ifdef __ANDROID__
+#include "androidhardwarebuffer.h"
+#endif
 #include "utils/common.h"
 #include "utils/containerof.h"
 
@@ -229,6 +232,11 @@ ClientConnection *Display::createClient(int fd)
 
 GraphicsBuffer *Display::bufferForResource(wl_resource *resource)
 {
+#ifdef __ANDROID__
+    if (auto buffer = AndroidHardwareClientBuffer::get(resource)) {
+        return buffer;
+    }
+#endif
     if (auto buffer = LinuxDmaBufV1ClientBuffer::get(resource)) {
         return buffer;
     } else if (auto buffer = ShmClientBuffer::get(resource)) {

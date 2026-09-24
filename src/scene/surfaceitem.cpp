@@ -322,6 +322,8 @@ bool OpenGLSurfaceTexture::create()
     GraphicsBuffer *buffer = m_item->buffer();
     if (buffer->dmabufAttributes()) {
         return loadDmabufTexture(buffer);
+    } else if (buffer->androidHardwareBufferAttributes()) {
+        return loadAndroidHardwareBufferTexture(buffer);
     } else if (buffer->shmAttributes()) {
         return loadShmTexture(buffer);
     } else if (buffer->singlePixelAttributes()) {
@@ -337,6 +339,8 @@ void OpenGLSurfaceTexture::destroy()
     m_texture.reset();
     m_bufferType = BufferType::None;
     m_size = QSize();
+    m_needsRedBlueSwap = false;
+    m_needsForceOpaque = false;
 }
 
 void OpenGLSurfaceTexture::update(const Region &region)
@@ -344,6 +348,8 @@ void OpenGLSurfaceTexture::update(const Region &region)
     GraphicsBuffer *buffer = m_item->buffer();
     if (buffer->dmabufAttributes()) {
         updateDmabufTexture(buffer);
+    } else if (buffer->androidHardwareBufferAttributes()) {
+        updateAndroidHardwareBufferTexture(buffer);
     } else if (buffer->shmAttributes()) {
         updateShmTexture(buffer, region);
     } else if (buffer->singlePixelAttributes()) {
@@ -356,6 +362,16 @@ void OpenGLSurfaceTexture::update(const Region &region)
 bool OpenGLSurfaceTexture::isFloatingPoint() const
 {
     return m_isFloatingPoint;
+}
+
+bool OpenGLSurfaceTexture::needsRedBlueSwap() const
+{
+    return m_needsRedBlueSwap;
+}
+
+bool OpenGLSurfaceTexture::needsForceOpaque() const
+{
+    return m_needsForceOpaque;
 }
 
 bool OpenGLSurfaceTexture::loadShmTexture(GraphicsBuffer *buffer)
@@ -498,6 +514,57 @@ void OpenGLSurfaceTexture::updateDmabufTexture(GraphicsBuffer *buffer)
     }
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
+}
+
+bool OpenGLSurfaceTexture::loadAndroidHardwareBufferTexture(GraphicsBuffer *buffer)
+{
+    const EGLImageKHR image = m_backend->importBufferAsImage(buffer);
+    if (image == EGL_NO_IMAGE_KHR) {
+        qCWarning(KWIN_OPENGL) << "Invalid AHardwareBuffer-based wl_buffer";
+        return false;
+    }
+
+    auto texture = std::make_shared<GLTexture>(GL_TEXTURE_2D);
+    texture->setSize(buffer->size());
+    if (!texture->create()) {
+        return false;
+    }
+    texture->setWrapMode(GL_CLAMP_TO_EDGE);
+    texture->setFilter(GL_LINEAR);
+    texture->bind();
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(image));
+    texture->unbind();
+    texture->setContentTransform(OutputTransform::FlipY);
+
+    m_texture = {{texture}};
+    m_bufferType = BufferType::AndroidHardwareBuffer;
+    m_size = buffer->size();
+    m_isFloatingPoint = false;
+    m_needsRedBlueSwap = buffer->androidHardwareBufferAttributes()->flags & 2;
+    m_needsForceOpaque = buffer->androidHardwareBufferAttributes()->flags & 1;
+    return true;
+}
+
+void OpenGLSurfaceTexture::updateAndroidHardwareBufferTexture(GraphicsBuffer *buffer)
+{
+    if (Q_UNLIKELY(m_bufferType != BufferType::AndroidHardwareBuffer)) {
+        destroy();
+        create();
+        return;
+    }
+
+    const EGLImageKHR image = m_backend->importBufferAsImage(buffer);
+    if (image == EGL_NO_IMAGE_KHR) {
+        qCWarning(KWIN_OPENGL) << "Invalid AHardwareBuffer-based wl_buffer";
+        return;
+    }
+
+    Q_ASSERT(m_texture.planes.count() == 1);
+    m_texture.planes[0]->bind();
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(image));
+    m_texture.planes[0]->unbind();
+    m_needsRedBlueSwap = buffer->androidHardwareBufferAttributes()->flags & 2;
+    m_needsForceOpaque = buffer->androidHardwareBufferAttributes()->flags & 1;
 }
 
 bool OpenGLSurfaceTexture::loadSinglePixelTexture(GraphicsBuffer *buffer)

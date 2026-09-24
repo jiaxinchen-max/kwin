@@ -24,7 +24,10 @@
 #include <QProcess>
 #include <dlfcn.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
+#include <vector>
 
 // LorieBuffer constants from buffer.h
 #ifndef LORIEBUFFER_AHARDWAREBUFFER
@@ -48,7 +51,7 @@ typedef struct Buffer_Desc Buffer;
 #include <GLES2/gl2ext.h>
 
 // Android AHardwareBuffer support (obtained from termux-render)
-#if __ANDROID_API__ >= 26
+#ifdef __ANDROID__
 #include <android/hardware_buffer.h>
 
 // EGL extensions for AHardwareBuffer
@@ -77,6 +80,10 @@ GLAPI void GLAPIENTRY glEGLImageTargetTexture2DOES(GLenum target, GLeglImageOES 
 
 #ifndef EGL_PLATFORM_SURFACELESS_MESA
 #define EGL_PLATFORM_SURFACELESS_MESA 0x31DD
+#endif
+
+#ifndef EGL_PLATFORM_ANDROID_KHR
+#define EGL_PLATFORM_ANDROID_KHR 0x3141
 #endif
 
 namespace KWin
@@ -129,7 +136,9 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
     m_renderTime = std::make_unique<CpuRenderTimeQuery>();
     
     return OutputLayerBeginFrameInfo{
-        .renderTarget = RenderTarget(m_fbo.get()),
+        // OpenGL framebuffers use a bottom-left origin, while termux-render
+        // samples the AHardwareBuffer with Android's top-left origin.
+        .renderTarget = RenderTarget(m_fbo.get(), OutputTransform::FlipY),
         .repaint = Region(0, 0, m_width, m_height),
     };
 }
@@ -140,11 +149,14 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
     frame->addRenderTimeQuery(std::move(m_renderTime));
     
     if (m_useDirectRendering) {
-        // Direct rendering mode - Mesa renders directly to AHardwareBuffer
+        // Direct rendering mode - render directly to AHardwareBuffer.
         // No pixel copy needed, just signal frame completion
         struct lorie_shared_server_state *serverState = m_backend->androidBackend()->serverState();
         if (serverState) {
-            glFlush();
+            // termux-render currently has no native-fence handoff. Wait for the
+            // producer before waking the consumer; replace this with an EGL
+            // native fence once the protocol can carry its fd.
+            glFinish();
             lorie_mutex_lock(&serverState->lock, &serverState->lockingPid);
             serverState->waitForNextFrame = false;
             serverState->drawRequested = 1;
@@ -229,9 +241,9 @@ bool AndroidEglLayer::setupRenderTarget()
         return false;
     }
     
-    // Check if we can use Mesa direct rendering with AHardwareBuffer
+    // Check if we can use direct rendering with AHardwareBuffer.
     if (trySetupDirectRendering()) {
-        qInfo() << "Using Mesa direct rendering to AHardwareBuffer";
+        qInfo() << "Using direct rendering to AHardwareBuffer";
         m_useDirectRendering = true;
         return true;
     }
@@ -273,8 +285,8 @@ bool AndroidEglLayer::setupRenderTarget()
 
 bool AndroidEglLayer::trySetupDirectRendering()
 {
-#if __ANDROID_API__ >= 26
-    qInfo() << "Attempting Mesa direct rendering setup...";
+#ifdef __ANDROID__
+    qInfo() << "Attempting AHardwareBuffer direct rendering setup...";
     
     // Get LorieBuffer description to access AHardwareBuffer
     const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
@@ -321,7 +333,13 @@ bool AndroidEglLayer::trySetupDirectRendering()
     }
     
     // Create EGLImage from AHardwareBuffer
-    EGLClientBuffer clientBuffer = eglGetNativeClientBufferANDROID(ahb);
+    using GetNativeClientBufferAndroidProc = EGLClientBuffer(EGLAPIENTRYP)(const AHardwareBuffer *buffer);
+    const auto getNativeClientBufferAndroid = reinterpret_cast<GetNativeClientBufferAndroidProc>(eglGetProcAddress("eglGetNativeClientBufferANDROID"));
+    if (!getNativeClientBufferAndroid) {
+        qWarning() << "eglGetNativeClientBufferANDROID is unavailable";
+        return false;
+    }
+    EGLClientBuffer clientBuffer = getNativeClientBufferAndroid(ahb);
     if (!clientBuffer) {
         qDebug() << "Failed to get native client buffer from AHardwareBuffer";
         return false;
@@ -332,8 +350,8 @@ bool AndroidEglLayer::trySetupDirectRendering()
         EGL_NONE
     };
     
-    m_eglImage = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, 
-                                   clientBuffer, imageAttribs);
+    m_eglImage = m_backend->eglDisplayObject()->createImage(EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID,
+                                                            clientBuffer, imageAttribs);
     
     if (m_eglImage == EGL_NO_IMAGE_KHR) {
         EGLint error = eglGetError();
@@ -344,7 +362,14 @@ bool AndroidEglLayer::trySetupDirectRendering()
     // Create and bind texture from EGLImage
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_eglImage);
+    using ImageTargetTexture2DProc = void(GL_APIENTRYP)(GLenum target, GLeglImageOES image);
+    const auto imageTargetTexture2D = reinterpret_cast<ImageTargetTexture2DProc>(eglGetProcAddress("glEGLImageTargetTexture2DOES"));
+    if (!imageTargetTexture2D) {
+        qWarning() << "glEGLImageTargetTexture2DOES is unavailable";
+        cleanupDirectRendering();
+        return false;
+    }
+    imageTargetTexture2D(GL_TEXTURE_2D, m_eglImage);
     
     // Create framebuffer and attach texture
     glGenFramebuffers(1, &m_framebuffer);
@@ -358,13 +383,13 @@ bool AndroidEglLayer::trySetupDirectRendering()
         return false;
     }
     
-    qInfo() << "Mesa direct rendering to AHardwareBuffer setup successful";
+    qInfo() << "Direct rendering to AHardwareBuffer setup successful";
     qInfo() << "Buffer size:" << desc->width << "x" << desc->height << "format:" << desc->format;
     
     return true;
     
 #else
-    qDebug() << "AHardwareBuffer requires Android API >= 26";
+    qDebug() << "AHardwareBuffer direct rendering is only available on Android";
     return false;
 #endif
 }
@@ -374,7 +399,7 @@ void AndroidEglLayer::cleanupDirectRendering()
     if (m_eglImage != EGL_NO_IMAGE_KHR) {
         EGLDisplay display = eglGetCurrentDisplay();
         if (display != EGL_NO_DISPLAY) {
-            eglDestroyImageKHR(display, m_eglImage);
+            m_backend->eglDisplayObject()->destroyImage(m_eglImage);
         }
         m_eglImage = EGL_NO_IMAGE_KHR;
     }
@@ -422,16 +447,16 @@ void AndroidEglLayer::releaseBuffers()
 AndroidEglBackend::AndroidEglBackend(AndroidBackend *backend)
     : m_backend(backend)
 {
-    qInfo() << "Initializing Android EGL backend with Mesa rendering";
+    qInfo() << "Initializing Android EGL backend";
     
     // Detect best rendering mode
     m_renderingMode = detectBestRenderingMode();
-    m_mesaAvailable = (m_renderingMode != RenderingMode::Fallback);
+    m_eglAvailable = (m_renderingMode != RenderingMode::Fallback);
     
-    if (!m_mesaAvailable) {
-        qWarning() << "Mesa not available - EGL backend may not work";
+    if (!m_eglAvailable) {
+        qWarning() << "No EGL renderer is available";
     } else {
-        setupMesaRendering(m_renderingMode);
+        setupRendering(m_renderingMode);
     }
 }
 
@@ -470,24 +495,27 @@ void AndroidEglBackend::init()
 bool AndroidEglBackend::initializeEgl()
 {
     qInfo() << "Initializing Android EGL backend";
-    if (!m_mesaAvailable) {
-        qCritical() << "Mesa is not available";
+    if (!m_eglAvailable) {
+        qCritical() << "No EGL renderer is available";
         return false;
     }
 
-    setupMesaRendering(m_renderingMode);
+    setupRendering(m_renderingMode);
     
     const char *clientExtensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     const QByteArray clientExtensionsString = clientExtensions ? QByteArray(clientExtensions) : QByteArray();
 
     EGLDisplay display = EGL_NO_DISPLAY;
-    if (clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_MESA_platform_surfaceless"))) {
-        using GetPlatformDisplayExtProc = EGLDisplay(EGLAPIENTRYP)(EGLenum platform, void *nativeDisplay, const EGLint *attribList);
-        auto getPlatformDisplay = reinterpret_cast<GetPlatformDisplayExtProc>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
-        if (getPlatformDisplay) {
-            display = getPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
-            qInfo() << "Using surfaceless EGL platform";
-        }
+    using GetPlatformDisplayExtProc = EGLDisplay(EGLAPIENTRYP)(EGLenum platform, void *nativeDisplay, const EGLint *attribList);
+    auto getPlatformDisplay = reinterpret_cast<GetPlatformDisplayExtProc>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    if (getPlatformDisplay && clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_KHR_platform_android"))) {
+        display = getPlatformDisplay(EGL_PLATFORM_ANDROID_KHR, EGL_DEFAULT_DISPLAY, nullptr);
+        qInfo() << "Using Android EGL platform";
+    }
+    if (display == EGL_NO_DISPLAY && getPlatformDisplay
+        && clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_MESA_platform_surfaceless"))) {
+        display = getPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+        qInfo() << "Using surfaceless EGL platform";
     }
 
     if (display == EGL_NO_DISPLAY) {
@@ -500,7 +528,8 @@ bool AndroidEglBackend::initializeEgl()
     }
 
     // Create EGL display wrapper
-    auto eglDisplay = EglDisplay::create(display);
+    const bool systemGles = m_renderingMode == RenderingMode::SystemGlesHardware;
+    auto eglDisplay = EglDisplay::create(display, true, !systemGles);
     if (!eglDisplay) {
         qCritical() << "Failed to create EglDisplay";
         return false;
@@ -508,12 +537,29 @@ bool AndroidEglBackend::initializeEgl()
     
     setEglDisplay(eglDisplay.release());
 
-    if (!createContext(EGL_NO_CONFIG_KHR) || !openglContext()->makeCurrent()) {
+    EGLConfig config = EGL_NO_CONFIG_KHR;
+    if (systemGles) {
+        const EGLint configAttributes[] = {
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT | EGL_OPENGL_ES3_BIT_KHR,
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_RED_SIZE, 8,
+            EGL_GREEN_SIZE, 8,
+            EGL_BLUE_SIZE, 8,
+            EGL_ALPHA_SIZE, 8,
+            EGL_NONE,
+        };
+        EGLint configCount = 0;
+        if (!eglChooseConfig(display, configAttributes, &config, 1, &configCount) || configCount == 0) {
+            qCritical() << "Failed to choose Android system EGL config";
+            return false;
+        }
+    }
+    if (!createContext(config) || !openglContext()->makeCurrent()) {
         qCritical() << "Failed to create KWin EGL context";
         return false;
     }
     
-    qInfo() << "Mesa EGL context created and made current";
+    qInfo() << "Android EGL context created and made current";
     
     // Log OpenGL information
     qInfo() << "OpenGL Vendor:" << (const char*)glGetString(GL_VENDOR);
@@ -587,7 +633,9 @@ bool AndroidEglBackend::isMesaAvailable()
 
 bool AndroidEglBackend::isZinkAvailable()
 {
-    // Check if Vulkan is available (required for Zink)
+    // Zink requires a Vulkan implementation, not a DRM render node. In native
+    // Termux an ICD can use Android's vendor Vulkan stack without exposing
+    // /dev/dri, so probe the Vulkan loader and its selected ICD directly.
     void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
     if (!vulkanLib) {
         vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
@@ -599,37 +647,7 @@ bool AndroidEglBackend::isZinkAvailable()
     }
     
     dlclose(vulkanLib);
-    
-    // Detect environment type
-    bool inPRoot = detectPRootEnvironment();
-    bool inContainer = detectContainerEnvironment();
-    
-    qInfo() << "Environment detection:";
-    qInfo() << "  PRoot:" << inPRoot;
-    qInfo() << "  Container:" << inContainer;
-    qInfo() << "  Plain Termux:" << (!inPRoot && !inContainer);
-    
-    // Check GPU device access based on environment
-    if (inContainer) {
-        // Real containers: check actual device files
-        if (QFile::exists("/dev/dri/card0") || QFile::exists("/dev/dri/renderD128")) {
-            qInfo() << "Container: GPU device files found - Zink available";
-            return true;
-        }
-    } else if (inPRoot) {
-        // PRoot: check both real and virtual device files
-        if (checkPRootGPUAccess()) {
-            qInfo() << "PRoot: GPU access available - Zink may work";
-            return true;
-        }
-    } else {
-        // Plain Termux: very limited GPU access
-        qInfo() << "Plain Termux: GPU devices not accessible - Zink not available";
-        return false;
-    }
-    
-    qInfo() << "No GPU access found - Zink not available";
-    return false;
+    return testVulkanDeviceEnumeration();
 }
 
 bool AndroidEglBackend::detectPRootEnvironment()
@@ -720,7 +738,68 @@ bool AndroidEglBackend::checkPRootGPUAccess()
 
 bool AndroidEglBackend::testVulkanDeviceEnumeration()
 {
-    // Try to load Vulkan and enumerate devices
+    // Keep this probe dynamically linked: Vulkan is optional for the Android
+    // backend and KWin must still build where Vulkan headers are unavailable.
+    using VkResult = int32_t;
+    using VkInstance = void *;
+    using VkPhysicalDevice = void *;
+    constexpr VkResult VK_SUCCESS = 0;
+    constexpr uint32_t VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
+    constexpr uint32_t VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
+
+    struct VkApplicationInfo {
+        uint32_t sType;
+        const void *pNext;
+        const char *pApplicationName;
+        uint32_t applicationVersion;
+        const char *pEngineName;
+        uint32_t engineVersion;
+        uint32_t apiVersion;
+    };
+    struct VkInstanceCreateInfo {
+        uint32_t sType;
+        const void *pNext;
+        uint32_t flags;
+        const VkApplicationInfo *pApplicationInfo;
+        uint32_t enabledLayerCount;
+        const char *const *ppEnabledLayerNames;
+        uint32_t enabledExtensionCount;
+        const char *const *ppEnabledExtensionNames;
+    };
+    using CreateInstance = VkResult (*)(const VkInstanceCreateInfo *, const void *, VkInstance *);
+    using DestroyInstance = void (*)(VkInstance, const void *);
+    using EnumeratePhysicalDevices = VkResult (*)(VkInstance, uint32_t *, VkPhysicalDevice *);
+    struct VkExtensionProperties {
+        char extensionName[256];
+        uint32_t specVersion;
+    };
+    struct VkPhysicalDeviceFeatures2 {
+        uint32_t sType;
+        void *pNext;
+        uint32_t features[55];
+    };
+    struct VkPhysicalDeviceRobustness2FeaturesEXT {
+        uint32_t sType;
+        void *pNext;
+        uint32_t robustBufferAccess2;
+        uint32_t robustImageAccess2;
+        uint32_t nullDescriptor;
+    };
+    using EnumerateDeviceExtensionProperties = VkResult (*)(VkPhysicalDevice, const char *, uint32_t *, VkExtensionProperties *);
+    using GetPhysicalDeviceFeatures2 = void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *);
+    struct alignas(8) VkPhysicalDeviceProperties {
+        uint32_t apiVersion;
+        uint32_t driverVersion;
+        uint32_t vendorID;
+        uint32_t deviceID;
+        uint32_t deviceType;
+        char deviceName[256];
+        uint8_t pipelineCacheUUID[16];
+        uint8_t remainingProperties[4096];
+    };
+    using GetPhysicalDeviceProperties = void (*)(VkPhysicalDevice, VkPhysicalDeviceProperties *);
+    constexpr uint32_t VK_PHYSICAL_DEVICE_TYPE_CPU = 4;
+
     void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
     if (!vulkanLib) {
         vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
@@ -730,37 +809,123 @@ bool AndroidEglBackend::testVulkanDeviceEnumeration()
         return false;
     }
     
-    // Get Vulkan function pointers
-    typedef int (*vkEnumerateInstanceExtensionPropertiesFunc)(const char*, uint32_t*, void*);
-    auto vkEnumerateInstanceExtensionProperties = 
-        (vkEnumerateInstanceExtensionPropertiesFunc)dlsym(vulkanLib, "vkEnumerateInstanceExtensionProperties");
-    
-    if (vkEnumerateInstanceExtensionProperties) {
-        uint32_t extensionCount = 0;
-        int result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        
+    const auto createInstance = reinterpret_cast<CreateInstance>(dlsym(vulkanLib, "vkCreateInstance"));
+    const auto destroyInstance = reinterpret_cast<DestroyInstance>(dlsym(vulkanLib, "vkDestroyInstance"));
+    const auto enumeratePhysicalDevices = reinterpret_cast<EnumeratePhysicalDevices>(dlsym(vulkanLib, "vkEnumeratePhysicalDevices"));
+    const auto enumerateDeviceExtensionProperties = reinterpret_cast<EnumerateDeviceExtensionProperties>(dlsym(vulkanLib, "vkEnumerateDeviceExtensionProperties"));
+    const auto getPhysicalDeviceFeatures2 = reinterpret_cast<GetPhysicalDeviceFeatures2>(dlsym(vulkanLib, "vkGetPhysicalDeviceFeatures2"));
+    const auto getPhysicalDeviceProperties = reinterpret_cast<GetPhysicalDeviceProperties>(dlsym(vulkanLib, "vkGetPhysicalDeviceProperties"));
+    if (!createInstance || !destroyInstance || !enumeratePhysicalDevices || !enumerateDeviceExtensionProperties || !getPhysicalDeviceFeatures2 || !getPhysicalDeviceProperties) {
+        qWarning() << "Vulkan loader lacks required instance entry points";
         dlclose(vulkanLib);
-        
-        if (result == 0 && extensionCount > 0) {
-            qInfo() << "Vulkan found" << extensionCount << "extensions - GPU may be accessible";
-            return true;
+        return false;
+    }
+
+    const VkApplicationInfo applicationInfo = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pNext = nullptr,
+        .pApplicationName = "kwin-android-zink-probe",
+        .applicationVersion = 0,
+        .pEngineName = "KWin",
+        .engineVersion = 0,
+        .apiVersion = 0,
+    };
+    const VkInstanceCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .pApplicationInfo = &applicationInfo,
+        .enabledLayerCount = 0,
+        .ppEnabledLayerNames = nullptr,
+        .enabledExtensionCount = 0,
+        .ppEnabledExtensionNames = nullptr,
+    };
+    VkInstance instance = nullptr;
+    const VkResult createResult = createInstance(&createInfo, nullptr, &instance);
+    if (createResult != VK_SUCCESS || !instance) {
+        qWarning() << "Vulkan instance creation failed:" << createResult;
+        dlclose(vulkanLib);
+        return false;
+    }
+
+    uint32_t deviceCount = 0;
+    VkResult enumerateResult = enumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    if (enumerateResult == VK_SUCCESS && deviceCount > 0) {
+        enumerateResult = enumeratePhysicalDevices(instance, &deviceCount, devices.data());
+        devices.resize(deviceCount);
+    }
+
+    bool zinkCompatibleHardwareFound = false;
+    if (enumerateResult == VK_SUCCESS) {
+        for (VkPhysicalDevice device : devices) {
+            VkPhysicalDeviceProperties properties = {};
+            getPhysicalDeviceProperties(device, &properties);
+            const bool isHardware = properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU;
+            uint32_t extensionCount = 0;
+            const VkResult extensionResult = enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+            std::vector<VkExtensionProperties> extensions(extensionCount);
+            if (extensionResult == VK_SUCCESS && extensionCount > 0) {
+                enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, extensions.data());
+                extensions.resize(extensionCount);
+            }
+            const bool hasRobustness2 = std::any_of(extensions.cbegin(), extensions.cend(), [](const VkExtensionProperties &extension) {
+                return std::strcmp(extension.extensionName, "VK_EXT_robustness2") == 0;
+            });
+            VkPhysicalDeviceRobustness2FeaturesEXT robustness2 = {
+                .sType = 1000286000,
+                .pNext = nullptr,
+                .robustBufferAccess2 = 0,
+                .robustImageAccess2 = 0,
+                .nullDescriptor = 0,
+            };
+            VkPhysicalDeviceFeatures2 features2 = {
+                .sType = 1000059000,
+                .pNext = &robustness2,
+                .features = {},
+            };
+            if (hasRobustness2) {
+                getPhysicalDeviceFeatures2(device, &features2);
+            }
+            const bool supportsNullDescriptor = hasRobustness2 && robustness2.nullDescriptor;
+            qInfo() << "Vulkan physical device:" << properties.deviceName
+                    << "type:" << properties.deviceType
+                    << "vendor:" << Qt::hex << properties.vendorID << Qt::dec
+                    << (isHardware ? "hardware" : "CPU")
+                    << "VK_EXT_robustness2.nullDescriptor:" << supportsNullDescriptor;
+            zinkCompatibleHardwareFound |= isHardware && supportsNullDescriptor;
         }
     }
-    
+    destroyInstance(instance, nullptr);
     dlclose(vulkanLib);
-    return false;
+    if (enumerateResult != VK_SUCCESS || deviceCount == 0 || !zinkCompatibleHardwareFound) {
+        qWarning() << "No Zink-compatible Vulkan device found:" << enumerateResult << "devices:" << deviceCount
+                   << "(Zink requires VK_EXT_robustness2 with nullDescriptor)";
+        return false;
+    }
+
+    qInfo() << "Vulkan ICD probe found a Zink-compatible hardware device among" << deviceCount << "physical device(s)";
+    return true;
 }
 
 AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
 {
     const QByteArray requestedMode = qgetenv("KWIN_ANDROID_GL_MODE").toLower();
+    if (requestedMode == "system" || requestedMode == "system-gles" || requestedMode == "gles") {
+        qInfo() << "KWIN_ANDROID_GL_MODE requests Android system GLES";
+        return RenderingMode::SystemGlesHardware;
+    }
     if (requestedMode == "llvmpipe" || requestedMode == "software") {
         qInfo() << "KWIN_ANDROID_GL_MODE requests llvmpipe";
         return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
     }
     if (requestedMode == "zink" || requestedMode == "hardware") {
         qInfo() << "KWIN_ANDROID_GL_MODE requests zink";
-        return (isZinkAvailable() && isMesaAvailable()) ? RenderingMode::ZinkHardware : RenderingMode::Fallback;
+        if (isZinkAvailable() && isMesaAvailable()) {
+            return RenderingMode::ZinkHardware;
+        }
+        qWarning() << "Requested hardware rendering is unavailable; falling back to llvmpipe";
+        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
     }
 
     const QByteArray mesaDriver = qgetenv("MESA_LOADER_DRIVER_OVERRIDE").toLower();
@@ -771,10 +936,22 @@ AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
     }
     if (mesaDriver == "zink" || galliumDriver == "zink") {
         qInfo() << "Existing Mesa environment requests zink";
-        return (isZinkAvailable() && isMesaAvailable()) ? RenderingMode::ZinkHardware : RenderingMode::Fallback;
+        if (isZinkAvailable() && isMesaAvailable()) {
+            return RenderingMode::ZinkHardware;
+        }
+        qWarning() << "Configured Zink device is not hardware-backed; falling back to llvmpipe";
+        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
     }
 
-    // Priority order: Zink (hardware) > llvmpipe (software) > fallback
+    // The Android backend defaults to the platform EGL/GLES implementation.
+    // This works without DRM devices or Vulkan feature emulation.
+    if (requestedMode.isEmpty()) {
+        qInfo() << "Selecting Android system GLES by default";
+        return RenderingMode::SystemGlesHardware;
+    }
+
+    // Priority order for explicitly configured Mesa paths:
+    // Zink (hardware) > llvmpipe (software) > fallback.
     
     if (isZinkAvailable() && isMesaAvailable()) {
         qInfo() << "Zink hardware acceleration available";
@@ -790,13 +967,24 @@ AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
     return RenderingMode::Fallback;
 }
 
-void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
+void AndroidEglBackend::setupRendering(RenderingMode mode)
 {
     // Android's compositor path uses OpenGL ES. Respect an explicit user value.
     setenv("KWIN_COMPOSE", "O2ES", 0);
     unsetenv("MESA_GLSL_VERSION_OVERRIDE");
 
     switch (mode) {
+    case RenderingMode::SystemGlesHardware:
+        qInfo() << "Configuring Android system EGL/GLES hardware acceleration";
+        unsetenv("LIBGL_ALWAYS_SOFTWARE");
+        unsetenv("MESA_LOADER_DRIVER_OVERRIDE");
+        unsetenv("GALLIUM_DRIVER");
+        unsetenv("MESA_GL_VERSION_OVERRIDE");
+        unsetenv("MESA_GLES_VERSION_OVERRIDE");
+        unsetenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE");
+        unsetenv("MESA_NO_ERROR");
+        unsetenv("MESA_DEBUG");
+        break;
     case RenderingMode::ZinkHardware:
         qInfo() << "Configuring Mesa for Zink hardware acceleration";
         
@@ -842,7 +1030,7 @@ void AndroidEglBackend::setupMesaRendering(RenderingMode mode)
     }
     
     // Common Mesa settings
-    if (mode != RenderingMode::Fallback) {
+    if (mode == RenderingMode::ZinkHardware || mode == RenderingMode::LlvmpipeSoftware) {
         setenv("MESA_DEBUG", "silent", 1);
         qInfo() << "Mesa rendering mode configured successfully";
     }

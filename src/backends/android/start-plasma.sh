@@ -19,10 +19,80 @@ done
 # 环境变量设置（日志初始化前）
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
+export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-0}"
+
+mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
+chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
+
+SESSION_LOCK_DIR="$XDG_RUNTIME_DIR/start-plasma.lock"
+SESSION_LOCK_PID_FILE="$SESSION_LOCK_DIR/pid"
+
+release_session_lock()
+{
+    if [ -f "$SESSION_LOCK_PID_FILE" ] && [ "$(cat "$SESSION_LOCK_PID_FILE" 2>/dev/null || true)" = "$$" ]; then
+        rm -f "$SESSION_LOCK_PID_FILE"
+        rmdir "$SESSION_LOCK_DIR" 2>/dev/null || true
+    fi
+}
+
+acquire_session_lock()
+{
+    local owner_pid
+
+    if mkdir "$SESSION_LOCK_DIR" 2>/dev/null; then
+        printf '%s\n' "$$" > "$SESSION_LOCK_PID_FILE"
+        return 0
+    fi
+
+    owner_pid="$(cat "$SESSION_LOCK_PID_FILE" 2>/dev/null || true)"
+    if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" 2>/dev/null; then
+        echo "Plasma is already starting or running (start-plasma pid $owner_pid)."
+        return 1
+    fi
+
+    rm -f "$SESSION_LOCK_PID_FILE"
+    if ! rmdir "$SESSION_LOCK_DIR" 2>/dev/null || ! mkdir "$SESSION_LOCK_DIR" 2>/dev/null; then
+        echo "Error: cannot acquire session lock: $SESSION_LOCK_DIR" >&2
+        return 2
+    fi
+    printf '%s\n' "$$" > "$SESSION_LOCK_PID_FILE"
+}
+
+if acquire_session_lock; then
+    :
+else
+    LOCK_STATUS=$?
+    exit "$LOCK_STATUS"
+fi
+trap release_session_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if command -v pgrep >/dev/null 2>&1; then
+    EXISTING_KWIN_PID="$(pgrep -x kwin_wayland | head -n 1 || true)"
+    if [ -n "$EXISTING_KWIN_PID" ]; then
+        echo "Plasma is already running (kwin_wayland pid $EXISTING_KWIN_PID)."
+        exit 0
+    fi
+fi
+
+KWIN_SOCKET_PATH="$XDG_RUNTIME_DIR/$KWIN_WAYLAND_SOCKET"
+if [ -S "$KWIN_SOCKET_PATH" ]; then
+    if command -v pgrep >/dev/null 2>&1 && pgrep -x kwin_wayland >/dev/null 2>&1; then
+        echo "Plasma is already running on $KWIN_WAYLAND_SOCKET."
+        exit 0
+    fi
+    echo "Removing stale Wayland socket: $KWIN_SOCKET_PATH"
+    rm -f "$KWIN_SOCKET_PATH" "$KWIN_SOCKET_PATH.lock"
+fi
 
 PLASMA_LOG="${PLASMA_LOG:-$PREFIX/tmp/start-plasma.log}"
 mkdir -p "$(dirname "$PLASMA_LOG")"
 : > "$PLASMA_LOG"
+exec 3>&1 4>&2
+echo "Starting Plasma; log: $PLASMA_LOG" >&3
 if [ "$VERBOSE_LOG" = "1" ]; then
     exec > >(tee -a "$PLASMA_LOG") 2>&1
 else
@@ -41,14 +111,12 @@ fi
 # 检查是否需要安装依赖
 if [ "$INSTALL_DEPS" = "1" ]; then
     echo "Installing required packages..."
-    pkg install plasma-desktop plasma-workspace kactivitymanagerd konsole dolphin dbus mesa virglrenderer-android -y
+    pkg install plasma-desktop plasma-workspace kactivitymanagerd konsole dolphin dbus mesa vulkan-wrapper-android vulkan-tools -y
     echo "✓ Dependencies installed"
     echo ""
 fi
 
 # 环境变量设置
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
-export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-0}"
 export XDG_CURRENT_DESKTOP="KDE"
 export XDG_SESSION_TYPE="wayland"
 export DESKTOP_SESSION="${DESKTOP_SESSION:-plasma}"
@@ -59,14 +127,11 @@ export KWIN_BACKEND="android"
 export KWIN_ANDROID_DISABLE_INPUT="${KWIN_ANDROID_DISABLE_INPUT:-0}"
 export KWIN_ANDROID_REFRESH_RATE="${KWIN_ANDROID_REFRESH_RATE:-30}"
 export KWIN_ANDROID_BUFFER_TYPE="${KWIN_ANDROID_BUFFER_TYPE:-ahb}"
-export KWIN_ANDROID_ENABLE_EGL="${KWIN_ANDROID_ENABLE_EGL:-0}"
+export KWIN_ANDROID_ENABLE_EGL="${KWIN_ANDROID_ENABLE_EGL:-1}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export XDG_MENU_PREFIX="${XDG_MENU_PREFIX:-plasma-}"
 export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
-mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
-chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
-
 find_kactivitymanagerd() {
     local candidate
     for candidate in \
@@ -131,75 +196,56 @@ if [ ${#MISSING_COMMANDS[@]} -gt 0 ]; then
     exit 1
 fi
 
-# 检查硬件加速选项
-MESA_KGSL_AVAILABLE=0
-if [ -f "$PREFIX/lib/dri/kgsl_dri.so" ]; then
-    echo "✓ Mesa kgsl driver found (Adreno GPU support)"
-    MESA_KGSL_AVAILABLE=1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RENDERING_ENV="${KWIN_ANDROID_RENDERING_ENV:-$PREFIX/bin/kwin-android-rendering-env}"
+if [ ! -f "$RENDERING_ENV" ]; then
+    RENDERING_ENV="$SCRIPT_DIR/android-rendering-env.sh"
 fi
-
-VIRGL_AVAILABLE=0
-if command -v virgl_test_server >/dev/null 2>&1; then
-    echo "✓ VirGL test server found"
-    VIRGL_AVAILABLE=1
+if [ ! -f "$RENDERING_ENV" ]; then
+    echo "Error: KWin Android rendering environment helper not found"
+    exit 1
 fi
+# shellcheck source=android-rendering-env.sh
+source "$RENDERING_ENV"
+kwin_android_select_rendering
 
-MESA_VIRGL_AVAILABLE=0
-if [ -f "$PREFIX/lib/dri/virpipe_dri.so" ]; then
-    echo "✓ Mesa VirGL driver found"
-    MESA_VIRGL_AVAILABLE=1
-fi
+cleanup_session()
+{
+    local status=$?
+    local pid
 
-MESA_LLVMPIPE_AVAILABLE=0
-if [ -f "$PREFIX/lib/dri/swrast_dri.so" ] || [ -f "$PREFIX/lib/dri/llvmpipe_dri.so" ]; then
-    echo "✓ Mesa software rendering available"
-    MESA_LLVMPIPE_AVAILABLE=1
-fi
-
-# 配置渲染后端（优先级：kgsl > virgl > llvmpipe）
-echo ""
-if [ $MESA_KGSL_AVAILABLE -eq 1 ]; then
-    echo "🚀 Using Mesa kgsl driver (Adreno GPU hardware acceleration)"
-    export MESA_LOADER_DRIVER_OVERRIDE=kgsl
-    export GALLIUM_DRIVER=freedreno
-    ACCELERATION_MODE="Adreno Hardware (kgsl)"
-    
-elif [ $VIRGL_AVAILABLE -eq 1 ] && [ $MESA_VIRGL_AVAILABLE -eq 1 ]; then
-    echo "🚀 Configuring VirGL hardware acceleration..."
-    export MESA_LOADER_DRIVER_OVERRIDE=virpipe
-    export GALLIUM_DRIVER=virgl
-    export VIRGL_VTEST=1
-    export VIRGL_VTEST_SOCKET_NAME="$TMPDIR/virgl_test"
-    
-    # 启动VirGL服务器
-    virgl_test_server --use-egl-surfaceless --use-gles &
-    VIRGL_SERVER_PID=$!
-    sleep 2
-    
-    if kill -0 $VIRGL_SERVER_PID 2>/dev/null; then
-        echo "✓ VirGL test server started"
-        trap 'kill "$VIRGL_SERVER_PID" 2>/dev/null || true' EXIT
-        ACCELERATION_MODE="VirGL Hardware"
-    else
-        echo "✗ VirGL failed, using software"
-        export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
-        export GALLIUM_DRIVER=llvmpipe
-        export LIBGL_ALWAYS_SOFTWARE=1
-        ACCELERATION_MODE="Mesa Software"
+    trap - EXIT INT TERM
+    for pid in \
+        "${PLASMASHELL_PID:-}" \
+        "${KACTIVITYMANAGERD_PID:-}" \
+        "${KDED_PID:-}" \
+        "${KDEINIT_PID:-}" \
+        "${KWIN_PID:-}"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+        fi
+    done
+    for pid in \
+        "${PLASMASHELL_PID:-}" \
+        "${KACTIVITYMANAGERD_PID:-}" \
+        "${KDED_PID:-}" \
+        "${KDEINIT_PID:-}" \
+        "${KWIN_PID:-}"; do
+        if [ -n "$pid" ]; then
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    if [ -n "${KWIN_ANDROID_AUX_PID:-}" ]; then
+        kill "$KWIN_ANDROID_AUX_PID" 2>/dev/null || true
+        wait "$KWIN_ANDROID_AUX_PID" 2>/dev/null || true
     fi
-    
-elif [ $MESA_LLVMPIPE_AVAILABLE -eq 1 ]; then
-    echo "⚠ Using Mesa software rendering"
-    export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
-    export GALLIUM_DRIVER=llvmpipe
-    export LIBGL_ALWAYS_SOFTWARE=1
-    ACCELERATION_MODE="Mesa Software"
-    
-else
-    echo "⚠ Using basic software rendering"
-    export LIBGL_ALWAYS_SOFTWARE=1
-    ACCELERATION_MODE="Basic Software"
-fi
+    if [ "${STARTED_DBUS:-0}" = "1" ] && [ -n "${DBUS_SESSION_BUS_PID:-}" ]; then
+        kill "$DBUS_SESSION_BUS_PID" 2>/dev/null || true
+    fi
+    release_session_lock
+    exit "$status"
+}
+trap cleanup_session EXIT
 
 # 性能调优
 export QSG_RENDER_LOOP=basic
@@ -209,6 +255,7 @@ echo ""
 echo "Environment setup complete:"
 echo "  Acceleration: $ACCELERATION_MODE"
 echo "  Mesa driver: ${MESA_LOADER_DRIVER_OVERRIDE:-default}"
+echo "  Vulkan ICD: ${VK_DRIVER_FILES:-${VK_ICD_FILENAMES:-Android system loader}}"
 echo ""
 
 # 启动D-Bus
@@ -216,6 +263,7 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     echo "Starting D-Bus..."
     if command -v dbus-launch >/dev/null 2>&1; then
         eval "$(dbus-launch --sh-syntax)"
+        STARTED_DBUS=1
     else
         echo "✗ Error: dbus-launch not found"
         exit 1
@@ -231,8 +279,14 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
         KDE_FULL_SESSION \
         KDE_SESSION_VERSION \
         KWIN_BACKEND \
+        KWIN_ANDROID_GL_MODE \
         KWIN_WAYLAND_SOCKET \
+        GALLIUM_DRIVER \
+        MESA_LOADER_DRIVER_OVERRIDE \
         QT_QPA_PLATFORM \
+        VK_DRIVER_FILES \
+        VK_ICD_FILENAMES \
+        WRAPPER_VULKAN_PATH \
         WAYLAND_DISPLAY \
         XDG_CONFIG_DIRS \
         XDG_CURRENT_DESKTOP \
@@ -249,10 +303,24 @@ kwin_wayland \
     --xwayland \
     --no-global-shortcuts &
 KWIN_PID=$!
-sleep 3
-if ! kill -0 "$KWIN_PID" 2>/dev/null; then
-    echo "✗ Error: kwin_wayland exited during startup"
-    wait "$KWIN_PID" || true
+KWIN_READY=0
+KWIN_STARTUP_TIMEOUT="${KWIN_ANDROID_STARTUP_TIMEOUT:-15}"
+for ((second = 0; second < KWIN_STARTUP_TIMEOUT; ++second)); do
+    if ! kill -0 "$KWIN_PID" 2>/dev/null; then
+        echo "✗ Error: kwin_wayland exited during startup"
+        echo "KWin startup failed; see $PLASMA_LOG" >&4
+        wait "$KWIN_PID" || true
+        exit 1
+    fi
+    if [ -S "$KWIN_SOCKET_PATH" ] && grep -q "Android EGL backend initialized" "$PLASMA_LOG"; then
+        KWIN_READY=1
+        break
+    fi
+    sleep 1
+done
+if [ "$KWIN_READY" != "1" ]; then
+    echo "✗ Error: kwin_wayland did not initialize the Android EGL backend within ${KWIN_STARTUP_TIMEOUT}s"
+    echo "KWin startup timed out; see $PLASMA_LOG" >&4
     exit 1
 fi
 export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
@@ -264,8 +332,10 @@ fi
 echo "Starting Plasma components..."
 if command -v kdeinit6 >/dev/null 2>&1; then
     kdeinit6 &
+    KDEINIT_PID=$!
 elif command -v kdeinit5 >/dev/null 2>&1; then
     kdeinit5 &
+    KDEINIT_PID=$!
 else
     echo "⚠ kdeinit not found, skipping"
 fi
@@ -273,8 +343,10 @@ sleep 1
 
 if command -v kded6 >/dev/null 2>&1; then
     kded6 &
+    KDED_PID=$!
 elif command -v kded5 >/dev/null 2>&1; then
     kded5 &
+    KDED_PID=$!
 else
     echo "⚠ kded not found, skipping"
 fi
@@ -328,5 +400,10 @@ echo "  $0                # Start Plasma (normal)"
 echo "  $0 --install-deps # Install dependencies first"
 echo ""
 echo "Press Ctrl+C to stop..."
+echo "Plasma started successfully (KWin pid $KWIN_PID)." >&3
 
-wait
+set +e
+wait "$KWIN_PID"
+KWIN_STATUS=$?
+set -e
+exit "$KWIN_STATUS"

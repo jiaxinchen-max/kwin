@@ -29,10 +29,10 @@ class AndroidBackend;
 class AndroidEglBackend;
 
 /**
- * @brief EGL rendering layer for Android backend using Mesa software rendering
+ * @brief EGL rendering layer for the Android backend.
  * 
- * This layer handles OpenGL ES rendering using Mesa's llvmpipe software renderer.
- * It avoids JavaVM dependencies by using Mesa's software implementation.
+ * Rendering can use Android system GLES, llvmpipe, or Mesa Zink backed by a
+ * Vulkan ICD. The output is imported from termux-render as an AHardwareBuffer.
  */
 class AndroidEglLayer : public OutputLayer
 {
@@ -54,7 +54,7 @@ public:
     bool setupRenderTarget();
     void cleanup();
     
-    // Mesa direct rendering support
+    // Direct rendering support
     bool trySetupDirectRendering();
     void cleanupDirectRendering();
 
@@ -68,7 +68,7 @@ private:
     GLuint m_texture = 0;
     GLuint m_framebuffer = 0;
     
-    // Mesa AHardwareBuffer integration
+    // AHardwareBuffer integration
     EGLImageKHR m_eglImage = EGL_NO_IMAGE_KHR;
     bool m_useDirectRendering = false;
     
@@ -77,11 +77,10 @@ private:
 };
 
 /**
- * @brief EGL backend for Android using Mesa software rendering
+ * @brief EGL backend for Android.
  * 
- * This backend uses Mesa's llvmpipe software renderer to provide OpenGL ES
- * functionality without requiring hardware GPU access or JavaVM integration.
- * It's specifically designed for Termux environments.
+ * The preferred path uses Android's system EGL/GLES. Zink and llvmpipe remain
+ * available for comparison and fallback.
  */
 class AndroidEglBackend : public EglBackend
 {
@@ -102,15 +101,16 @@ public:
     
     // Rendering mode detection
     enum class RenderingMode {
+        SystemGlesHardware, // Android system EGL/GLES
         ZinkHardware,      // Zink driver with GPU acceleration
         LlvmpipeSoftware,  // llvmpipe software rendering
-        Fallback           // No Mesa support
+        Fallback           // No EGL support
     };
     
     static bool isMesaAvailable();
     static bool isZinkAvailable();
     static RenderingMode detectBestRenderingMode();
-    static void setupMesaRendering(RenderingMode mode);
+    static void setupRendering(RenderingMode mode);
     
     // Environment detection
     static bool detectPRootEnvironment();
@@ -128,8 +128,7 @@ private:
     AndroidBackend *const m_backend;
     QList<AndroidEglLayer *> m_layers;
     
-    // Mesa detection
-    bool m_mesaAvailable = false;
+    bool m_eglAvailable = false;
     RenderingMode m_renderingMode = RenderingMode::Fallback;
 };
 

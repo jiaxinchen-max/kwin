@@ -32,7 +32,7 @@ bool EglDisplay::shouldUseOpenGLES()
     return QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGLES;
 }
 
-std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning)
+std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning, bool requireConfiglessSurfaceless)
 {
     if (!display) {
         return nullptr;
@@ -60,14 +60,16 @@ std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning
 
     const auto extensions = QByteArray(eglQueryString(display, EGL_EXTENSIONS)).split(' ');
 
-    const QByteArray requiredExtensions[] = {
-        QByteArrayLiteral("EGL_KHR_no_config_context"),
-        QByteArrayLiteral("EGL_KHR_surfaceless_context"),
-    };
-    for (const QByteArray &extensionName : requiredExtensions) {
-        if (!extensions.contains(extensionName)) {
-            qCWarning(KWIN_OPENGL) << extensionName << "extension is unsupported";
-            return nullptr;
+    if (requireConfiglessSurfaceless) {
+        const QByteArray requiredExtensions[] = {
+            QByteArrayLiteral("EGL_KHR_no_config_context"),
+            QByteArrayLiteral("EGL_KHR_surfaceless_context"),
+        };
+        for (const QByteArray &extensionName : requiredExtensions) {
+            if (!extensions.contains(extensionName)) {
+                qCWarning(KWIN_OPENGL) << extensionName << "extension is unsupported";
+                return nullptr;
+            }
         }
     }
 

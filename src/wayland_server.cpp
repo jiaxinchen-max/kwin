@@ -74,6 +74,9 @@
 #include "wayland/server_decoration_palette.h"
 #include "wayland/shadow.h"
 #include "wayland/singlepixelbuffer.h"
+#ifdef __ANDROID__
+#include "wayland/androidhardwarebuffer.h"
+#endif
 #include "wayland/subcompositor.h"
 #include "wayland/tablet_v2.h"
 #include "wayland/tearingcontrol_v1.h"
@@ -531,6 +534,9 @@ bool WaylandServer::init()
     new FixesInterface(m_display, m_display);
     m_fifoManager = new FifoManagerV1(m_display, m_display);
     m_singlePixelBuffer = new SinglePixelBufferManagerV1(m_display, m_display);
+#ifdef __ANDROID__
+    new AndroidHardwareBufferManagerV1(m_display, m_display);
+#endif
     m_toplevelTag = new XdgToplevelTagManagerV1(m_display, m_display);
     m_colorRepresentation = new ColorRepresentationManagerV1(m_display, m_display);
     m_pointerWarp = new PointerWarpV1(m_display, m_display);

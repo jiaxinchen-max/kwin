@@ -26,6 +26,10 @@
 #include <unistd.h>
 #include <xf86drm.h>
 
+#ifdef __ANDROID__
+#include <android/hardware_buffer.h>
+#endif
+
 namespace KWin
 {
 
@@ -306,15 +310,27 @@ EGLImageKHR EglBackend::importBufferAsImage(GraphicsBuffer *buffer)
         return *it;
     }
 
-    Q_ASSERT(buffer->dmabufAttributes());
-    EGLImageKHR image = importDmaBufAsImage(*buffer->dmabufAttributes());
+    EGLImageKHR image = EGL_NO_IMAGE_KHR;
+    if (const auto attributes = buffer->dmabufAttributes()) {
+        image = importDmaBufAsImage(*attributes);
+#ifdef __ANDROID__
+    } else if (const auto attributes = buffer->androidHardwareBufferAttributes()) {
+        using GetNativeClientBufferProc = EGLClientBuffer(EGLAPIENTRYP)(const AHardwareBuffer *buffer);
+        const auto getNativeClientBuffer = reinterpret_cast<GetNativeClientBufferProc>(eglGetProcAddress("eglGetNativeClientBufferANDROID"));
+        if (getNativeClientBuffer) {
+            const EGLClientBuffer clientBuffer = getNativeClientBuffer(static_cast<AHardwareBuffer *>(attributes->buffer));
+            const EGLint imageAttributes[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
+            image = m_display->createImage(EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, imageAttributes);
+        }
+#endif
+    }
     if (image != EGL_NO_IMAGE_KHR) {
         m_importedBuffers[key] = image;
         connect(buffer, &QObject::destroyed, this, [this, key]() {
             m_display->destroyImage(m_importedBuffers.take(key));
         });
     } else {
-        qCWarning(KWIN_OPENGL) << "failed to import dmabuf" << buffer;
+        qCWarning(KWIN_OPENGL) << "failed to import graphics buffer" << buffer;
     }
 
     return image;
@@ -337,6 +353,12 @@ std::shared_ptr<GLTexture> EglBackend::importDmaBufAsTexture(const DmaBufAttribu
 
 bool EglBackend::testImportBuffer(GraphicsBuffer *buffer)
 {
+    if (buffer->androidHardwareBufferAttributes()) {
+        return importBufferAsImage(buffer) != EGL_NO_IMAGE_KHR;
+    }
+    if (!buffer->dmabufAttributes()) {
+        return false;
+    }
     const auto nonExternalOnly = m_display->nonExternalOnlySupportedDrmFormats();
     if (auto it = nonExternalOnly.find(buffer->dmabufAttributes()->format); it != nonExternalOnly.end() && it->contains(buffer->dmabufAttributes()->modifier)) {
         return importBufferAsImage(buffer) != EGL_NO_IMAGE_KHR;
