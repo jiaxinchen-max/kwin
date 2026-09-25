@@ -41,7 +41,14 @@ fi
 # 检查是否需要安装依赖
 if [ "$INSTALL_DEPS" = "1" ]; then
     echo "Installing required packages..."
-    pkg install plasma-desktop plasma-workspace kactivitymanagerd konsole dolphin dbus mesa vulkan-wrapper-android vulkan-tools gdb -y
+    RENDER_DEPS=(
+        plasma-desktop plasma-workspace kactivitymanagerd
+        konsole dolphin dbus mesa vulkan-tools gdb
+    )
+    if [ -e "${KWIN_ANDROID_KGSL_DEVICE:-/dev/kgsl-3d0}" ]; then
+        RENDER_DEPS+=(mesa-vulkan-icd-freedreno)
+    fi
+    pkg install "${RENDER_DEPS[@]}" -y
     echo "✓ Dependencies installed"
     echo ""
 fi
