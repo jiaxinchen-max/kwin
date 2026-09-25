@@ -746,6 +746,7 @@ bool AndroidEglBackend::testVulkanDeviceEnumeration()
     constexpr VkResult VK_SUCCESS = 0;
     constexpr uint32_t VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
     constexpr uint32_t VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
+    constexpr uint32_t VK_API_VERSION_1_1 = (1U << 22) | (1U << 12);
 
     struct VkApplicationInfo {
         uint32_t sType;
@@ -828,7 +829,10 @@ bool AndroidEglBackend::testVulkanDeviceEnumeration()
         .applicationVersion = 0,
         .pEngineName = "KWin",
         .engineVersion = 0,
-        .apiVersion = 0,
+        // vkGetPhysicalDeviceFeatures2 is a Vulkan 1.1 core command. With a
+        // Vulkan 1.0 instance, Turnip leaves the robustness2 feature chain
+        // untouched and nullDescriptor is incorrectly observed as false.
+        .apiVersion = VK_API_VERSION_1_1,
     };
     const VkInstanceCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -924,8 +928,8 @@ AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
         if (isZinkAvailable() && isMesaAvailable()) {
             return RenderingMode::ZinkHardware;
         }
-        qWarning() << "Requested hardware rendering is unavailable; falling back to llvmpipe";
-        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
+        qWarning() << "Requested Zink rendering is unavailable; falling back to Android system GLES";
+        return RenderingMode::SystemGlesHardware;
     }
 
     const QByteArray mesaDriver = qgetenv("MESA_LOADER_DRIVER_OVERRIDE").toLower();
@@ -939,8 +943,8 @@ AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
         if (isZinkAvailable() && isMesaAvailable()) {
             return RenderingMode::ZinkHardware;
         }
-        qWarning() << "Configured Zink device is not hardware-backed; falling back to llvmpipe";
-        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
+        qWarning() << "Configured Zink device is not hardware-backed; falling back to Android system GLES";
+        return RenderingMode::SystemGlesHardware;
     }
 
     // The Android backend defaults to the platform EGL/GLES implementation.
@@ -976,6 +980,7 @@ void AndroidEglBackend::setupRendering(RenderingMode mode)
     switch (mode) {
     case RenderingMode::SystemGlesHardware:
         qInfo() << "Configuring Android system EGL/GLES hardware acceleration";
+        setenv("KWIN_COMPOSE", "O2ES", 1);
         unsetenv("LIBGL_ALWAYS_SOFTWARE");
         unsetenv("MESA_LOADER_DRIVER_OVERRIDE");
         unsetenv("GALLIUM_DRIVER");
