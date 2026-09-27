@@ -481,6 +481,10 @@ bool OpenGLSurfaceTexture::loadDmabufTexture(GraphicsBuffer *buffer)
     m_size = buffer->size();
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
+    if (const auto attributes = buffer->androidHardwareBufferAttributes()) {
+        m_needsRedBlueSwap = attributes->flags & 2;
+        m_needsForceOpaque = attributes->flags & 1;
+    }
 
     return true;
 }
@@ -514,6 +518,10 @@ void OpenGLSurfaceTexture::updateDmabufTexture(GraphicsBuffer *buffer)
     }
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
+    if (const auto attributes = buffer->androidHardwareBufferAttributes()) {
+        m_needsRedBlueSwap = attributes->flags & 2;
+        m_needsForceOpaque = attributes->flags & 1;
+    }
 }
 
 bool OpenGLSurfaceTexture::loadAndroidHardwareBufferTexture(GraphicsBuffer *buffer)

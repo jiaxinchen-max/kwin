@@ -27,3 +27,13 @@ install(PROGRAMS start-kwin-x11-zink.sh
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     RENAME kwin-x11-zink
 )
+
+install(PROGRAMS kwin-glxgears-test.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kwin-glxgears-test
+)
+
+install(PROGRAMS kwin-glxgears-zink-test.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kwin-glxgears-zink-test
+)

@@ -20,13 +20,14 @@
 
 #include <QByteArray>
 #include <QDebug>
-#include <QFile>
-#include <QProcess>
+#include <QLoggingCategory>
 #include <dlfcn.h>
+#include <drm_fourcc.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 // LorieBuffer constants from buffer.h
@@ -91,23 +92,100 @@ namespace KWin
 namespace Android
 {
 
+Q_LOGGING_CATEGORY(KWIN_ANDROID_EGL, "kwin.android.egl", QtInfoMsg)
+
+#ifdef __ANDROID__
+namespace
+{
+
+struct NativeHandle
+{
+    int version;
+    int numFds;
+    int numInts;
+    int data[];
+};
+
+using GetNativeHandleProc = const NativeHandle *(*)(const AHardwareBuffer *buffer);
+using PlatformDlopenProc = void *(*)(const char *filename, int flags);
+using DupDmaBufFdProc = int (*)(const LorieBuffer *buffer);
+
+DupDmaBufFdProc resolveLorieBufferDupDmaBufFd()
+{
+    static const auto proc = reinterpret_cast<DupDmaBufFdProc>(
+        dlsym(RTLD_DEFAULT, "LorieBuffer_dupDmaBufFd"));
+    return proc;
+}
+
+GetNativeHandleProc resolveGetNativeHandle()
+{
+    static const GetNativeHandleProc proc = []() -> GetNativeHandleProc {
+        auto platformDlopen = reinterpret_cast<PlatformDlopenProc>(dlsym(RTLD_DEFAULT, "platform_dlopen"));
+        if (!platformDlopen) {
+            void *platformNamespaceLibrary = dlopen("libtermux-platform-ns.so", RTLD_NOW | RTLD_LOCAL);
+            if (platformNamespaceLibrary) {
+                platformDlopen = reinterpret_cast<PlatformDlopenProc>(dlsym(platformNamespaceLibrary, "platform_dlopen"));
+            }
+        }
+        if (!platformDlopen) {
+            qWarning() << "platform_dlopen is unavailable; dma-buf AHardwareBuffer import is disabled";
+            return nullptr;
+        }
+
+#if defined(__LP64__)
+        constexpr const char *systemLibAndroid = "/system/lib64/libandroid.so";
+#else
+        constexpr const char *systemLibAndroid = "/system/lib/libandroid.so";
+#endif
+        void *handle = platformDlopen(systemLibAndroid, RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            qWarning() << "Failed to open Android platform libandroid.so:" << dlerror();
+            return nullptr;
+        }
+
+        const auto getNativeHandle = reinterpret_cast<GetNativeHandleProc>(dlsym(handle, "AHardwareBuffer_getNativeHandle"));
+        if (!getNativeHandle) {
+            qWarning() << "AHardwareBuffer_getNativeHandle is unavailable:" << dlerror();
+        }
+        return getNativeHandle;
+    }();
+    return proc;
+}
+
+std::optional<uint32_t> drmFormatForHardwareBuffer(uint8_t format)
+{
+    switch (format) {
+    case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM:
+        return DRM_FORMAT_ABGR8888;
+    case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
+        return DRM_FORMAT_XBGR8888;
+    case AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM:
+        return DRM_FORMAT_ARGB8888;
+    default:
+        return std::nullopt;
+    }
+}
+
+}
+#endif
+
 AndroidEglLayer::AndroidEglLayer(BackendOutput *output, AndroidEglBackend *backend)
     : OutputLayer(output, OutputLayerType::Primary)
     , m_backend(backend)
 {
-    qInfo() << "Created AndroidEglLayer for output" << output->name();
+    qCDebug(KWIN_ANDROID_EGL) << "Created AndroidEglLayer for output" << output->name();
 }
 
 AndroidEglLayer::~AndroidEglLayer()
 {
     cleanup();
-    qInfo() << "Destroyed AndroidEglLayer";
+    qCDebug(KWIN_ANDROID_EGL) << "Destroyed AndroidEglLayer";
 }
 
 std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
 {
     const QSize nativeSize(m_output->modeSize());
-    qDebug() << "AndroidEglLayer::doBeginFrame() - size:" << nativeSize;
+    qCDebug(KWIN_ANDROID_EGL) << "AndroidEglLayer::doBeginFrame() - size:" << nativeSize;
     
     // Setup render target if needed
     if (m_width != nativeSize.width() || m_height != nativeSize.height() || !m_fbo) {
@@ -121,7 +199,7 @@ std::optional<OutputLayerBeginFrameInfo> AndroidEglLayer::doBeginFrame()
         // Bind the AHardwareBuffer framebuffer for direct rendering
         glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         glViewport(0, 0, m_width, m_height);
-        qDebug() << "Using direct rendering to AHardwareBuffer";
+        qCDebug(KWIN_ANDROID_EGL) << "Using direct rendering to AHardwareBuffer";
         
         // Create a GLFramebuffer wrapper for the AHardwareBuffer framebuffer
         // This allows KWin to use the AHardwareBuffer framebuffer with existing rendering code
@@ -164,7 +242,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
                 pthread_cond_signal(rendererCond);
             lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
             
-            qDebug() << "Direct rendering frame completed - zero copy";
+            qCDebug(KWIN_ANDROID_EGL) << "Direct rendering frame completed - zero copy";
         }
         return true;
     }
@@ -192,28 +270,57 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
 
             // Get buffer description
             const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
-            if (desc && shared_buffer) {
+            if (desc && shared_buffer && desc->width > 0 && desc->height > 0 && desc->stride >= desc->width) {
+                constexpr size_t bytesPerPixel = 4;
+                const size_t rowBytes = static_cast<size_t>(desc->width) * bytesPerPixel;
+                const size_t destinationRowBytes = static_cast<size_t>(desc->stride) * bytesPerPixel;
+                if (static_cast<size_t>(desc->height) > std::numeric_limits<size_t>::max() / rowBytes) {
+                    qCritical() << "Android readback buffer size overflow";
+                    LorieBuffer_unlock((LorieBuffer *)m_buffer);
+                    lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+                    return true;
+                }
+
+                m_readbackBuffer.resize(rowBytes * static_cast<size_t>(desc->height));
+
                 // Bind our framebuffer to read from it
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, m_framebuffer);
 
-                // Read pixels directly into the shared buffer
-                glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, shared_buffer);
+                // glReadPixels writes tightly packed rows, while AHardwareBuffer
+                // rows may contain padding (desc->stride > desc->width). Read to
+                // a tightly packed staging buffer and copy each row using the
+                // destination stride to avoid progressively skewing the image.
+                glPixelStorei(GL_PACK_ALIGNMENT, 4);
+                glReadPixels(0, 0, desc->width, desc->height, GL_RGBA, GL_UNSIGNED_BYTE, m_readbackBuffer.data());
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
+                auto *destination = static_cast<uint8_t *>(shared_buffer);
+                for (int y = 0; y < desc->height; ++y) {
+                    std::memcpy(destination + static_cast<size_t>(y) * destinationRowBytes,
+                                m_readbackBuffer.data() + static_cast<size_t>(y) * rowBytes,
+                                rowBytes);
+                }
+
+                ret = LorieBuffer_unlock((LorieBuffer*)m_buffer);
+                if (ret != 0) {
+                    qCritical() << "Failed to flush LorieBuffer";
+                    lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
+                    return true;
+                }
+
+                // Do not wake the consumer until AHardwareBuffer_unlock has
+                // flushed the CPU writes. The shared mutex keeps the producer
+                // and consumer from accessing the single buffer concurrently.
                 serverState->waitForNextFrame = false;
                 serverState->drawRequested = 1;
                 if (rendererCond)
                     pthread_cond_signal(rendererCond);
                 lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
 
-                ret = LorieBuffer_unlock((LorieBuffer*)m_buffer);
-                if (ret != 0) {
-                    qCritical() << "Failed to flush LorieBuffer";
-                    return true;
-                }
-
-                qDebug() << "Copied frame to shared buffer:" << desc->width << "x" << desc->height;
+                qCDebug(KWIN_ANDROID_EGL) << "Copied frame to shared buffer:" << desc->width << "x" << desc->height
+                                          << "stride:" << desc->stride;
             } else {
+                qCritical() << "Invalid LorieBuffer mapping or stride";
                 LorieBuffer_unlock((LorieBuffer*)m_buffer);
                 lorie_mutex_unlock(&serverState->lock, &serverState->lockingPid);
             }
@@ -226,7 +333,7 @@ bool AndroidEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
 bool AndroidEglLayer::setupRenderTarget()
 {
     const QSize nativeSize(m_output->modeSize());
-    qInfo() << "Setting up render target:" << nativeSize;
+    qCDebug(KWIN_ANDROID_EGL) << "Setting up render target:" << nativeSize;
     
     // Clean up existing resources
     cleanup();
@@ -241,14 +348,38 @@ bool AndroidEglLayer::setupRenderTarget()
         return false;
     }
     
-    // Check if we can use direct rendering with AHardwareBuffer.
-    if (trySetupDirectRendering()) {
-        qInfo() << "Using direct rendering to AHardwareBuffer";
+    // The renderer pins exactly one output-buffer combination. Never fall back
+    // between them: fail loudly so a broken device reveals which combination did
+    // not work instead of silently running a different one.
+    switch (resolveOutputImport()) {
+    case OutputImport::Native:
+        if (!trySetupAndroidNativeBufferDirectRendering()) {
+            qCritical() << "System GLES pins EGL_NATIVE_BUFFER_ANDROID import, but it failed;"
+                        << "refusing to fall back to dma-buf or CPU readback";
+            return false;
+        }
         m_useDirectRendering = true;
         return true;
+    case OutputImport::DmaBuf:
+        if (!trySetupDmaBufDirectRendering()) {
+            qCritical() << "Zink pins dma-buf AHardwareBuffer import, but it failed;"
+                        << "refusing to fall back to native import or CPU readback";
+            return false;
+        }
+        m_useDirectRendering = true;
+        return true;
+    case OutputImport::Invalid:
+        qCritical() << "No valid output buffer import for the selected renderer;"
+                    << "check KWIN_ANDROID_GL_MODE and KWIN_ANDROID_AHB_IMPORT";
+        return false;
+    case OutputImport::Readback:
+        break;
     }
-    
-    qInfo() << "Falling back to traditional rendering with glReadPixels";
+
+    // Pinned CPU readback path (llvmpipe, or KWIN_ANDROID_AHB_IMPORT=off): KWin
+    // renders into a plain texture FBO and doEndFrame() copies it into the
+    // shared buffer. This is a chosen combination, not a failure fallback.
+    qInfo() << "Using CPU readback output path (glReadPixels)";
     m_useDirectRendering = false;
     
     // Create OpenGL texture
@@ -279,45 +410,161 @@ bool AndroidEglLayer::setupRenderTarget()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     
-    qInfo() << "Render target setup successful";
+    qCDebug(KWIN_ANDROID_EGL) << "Render target setup successful";
     return true;
 }
 
-bool AndroidEglLayer::trySetupDirectRendering()
+AndroidEglLayer::OutputImport AndroidEglLayer::resolveOutputImport() const
+{
+    // Each renderer pins one complete output-buffer combination (mirrors the
+    // KWIN_ANDROID_AHB_IMPORT table in packaging/TERMUX_AHB_BUILD_GUIDE.md).
+    // kwin-android-rendering-env exports the matching value; an explicit
+    // KWIN_ANDROID_AHB_IMPORT only overrides it for experiments.
+    OutputImport pinned = OutputImport::Invalid;
+    switch (m_backend->renderingMode()) {
+    case AndroidEglBackend::RenderingMode::SystemGlesHardware:
+        pinned = OutputImport::Native;
+        break;
+    case AndroidEglBackend::RenderingMode::ZinkHardware:
+        pinned = OutputImport::DmaBuf;
+        break;
+    case AndroidEglBackend::RenderingMode::LlvmpipeSoftware:
+        pinned = OutputImport::Readback;
+        break;
+    case AndroidEglBackend::RenderingMode::Fallback:
+        return OutputImport::Invalid;
+    }
+
+    const QByteArray requested = qgetenv("KWIN_ANDROID_AHB_IMPORT").trimmed().toLower();
+    if (requested.isEmpty()) {
+        return pinned;
+    }
+    if (requested == "native") {
+        return OutputImport::Native;
+    }
+    if (requested == "dmabuf") {
+        return OutputImport::DmaBuf;
+    }
+    if (requested == "off" || requested == "0" || requested == "false" || requested == "readback") {
+        return OutputImport::Readback;
+    }
+    qWarning() << "Unsupported KWIN_ANDROID_AHB_IMPORT value:" << requested
+               << "- expected native, dmabuf or off";
+    return OutputImport::Invalid;
+}
+
+bool AndroidEglLayer::trySetupDmaBufDirectRendering()
 {
 #ifdef __ANDROID__
-    qInfo() << "Attempting AHardwareBuffer direct rendering setup...";
-    
     // Get LorieBuffer description to access AHardwareBuffer
     const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer*)m_buffer);
     if (!desc) {
-        qDebug() << "No buffer description available";
+        qCDebug(KWIN_ANDROID_EGL) << "No buffer description available";
         return false;
     }
     
     // Check if this is an AHardwareBuffer type
     if (desc->type != LORIEBUFFER_AHARDWAREBUFFER) {
-        qDebug() << "LorieBuffer is not AHardwareBuffer type, got type:" << desc->type;
+        qCDebug(KWIN_ANDROID_EGL) << "LorieBuffer is not AHardwareBuffer type, got type:" << desc->type;
         return false;
     }
     
-    // Get the AHardwareBuffer
+    EglDisplay *eglDisplay = m_backend->eglDisplayObject();
+    if (!eglDisplay || !eglDisplay->hasExtension(QByteArrayLiteral("EGL_EXT_image_dma_buf_import"))) {
+        qCDebug(KWIN_ANDROID_EGL) << "EGL_EXT_image_dma_buf_import is unavailable";
+        return false;
+    }
+
+    const auto drmFormat = drmFormatForHardwareBuffer(desc->format);
+    if (!drmFormat) {
+        qWarning() << "Unsupported AHardwareBuffer format for dma-buf import:" << desc->format;
+        return false;
+    }
+    if (desc->width <= 0 || desc->height <= 0 || desc->stride < desc->width) {
+        qWarning() << "Invalid AHardwareBuffer geometry for dma-buf import:"
+                   << desc->width << desc->height << desc->stride;
+        return false;
+    }
+
+    int dmaBufFd = -1;
+    int nativeHandleFdCount = 0;
+    if (const auto dupDmaBufFd = resolveLorieBufferDupDmaBufFd()) {
+        dmaBufFd = dupDmaBufFd(reinterpret_cast<LorieBuffer *>(m_buffer));
+    }
+
+    if (dmaBufFd < 0 && desc->buffer) {
+        const auto getNativeHandle = resolveGetNativeHandle();
+        if (!getNativeHandle) {
+            return false;
+        }
+
+        const NativeHandle *nativeHandle = getNativeHandle(desc->buffer);
+        if (!nativeHandle || nativeHandle->version < int(sizeof(NativeHandle))
+            || nativeHandle->numFds < 1 || nativeHandle->numFds > 4
+            || nativeHandle->numInts < 0) {
+            qWarning() << "Invalid AHardwareBuffer native handle";
+            return false;
+        }
+        nativeHandleFdCount = nativeHandle->numFds;
+        dmaBufFd = fcntl(nativeHandle->data[0], F_DUPFD_CLOEXEC, 0);
+    }
+
+    if (dmaBufFd < 0) {
+        qWarning() << "LorieBuffer exposes no usable dma-buf fd:" << strerror(errno);
+        return false;
+    }
+
+    DmaBufAttributes attributes;
+    attributes.planeCount = 1;
+    attributes.width = desc->width;
+    attributes.height = desc->height;
+    attributes.format = *drmFormat;
+    attributes.modifier = DRM_FORMAT_MOD_INVALID;
+    attributes.fd[0] = FileDescriptor(dmaBufFd);
+    attributes.offset[0] = 0;
+    attributes.pitch[0] = uint32_t(desc->stride) * 4;
+
+    m_eglImage = eglDisplay->importDmaBufAsImage(attributes);
+    if (m_eglImage == EGL_NO_IMAGE_KHR) {
+        qWarning() << "Failed to import AHardwareBuffer dma-buf as EGLImage, error:"
+                   << Qt::hex << eglGetError();
+        return false;
+    }
+
+    if (!setupDirectFramebuffer()) {
+        cleanupDirectRendering();
+        return false;
+    }
+
+    qInfo() << "AHardwareBuffer dma-buf direct import setup successful"
+            << "size:" << desc->width << "x" << desc->height
+            << "stride:" << desc->stride << "format:" << Qt::hex << *drmFormat
+            << "native handle fds:" << nativeHandleFdCount;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool AndroidEglLayer::trySetupAndroidNativeBufferDirectRendering()
+{
+#ifdef __ANDROID__
+    const LorieBuffer_Desc *desc = LorieBuffer_description((LorieBuffer *)m_buffer);
+    if (!desc || desc->type != LORIEBUFFER_AHARDWAREBUFFER || !desc->buffer) {
+        return false;
+    }
+
     AHardwareBuffer *ahb = desc->buffer;
-    if (!ahb) {
-        qDebug() << "LorieBuffer description has no AHardwareBuffer";
-        return false;
-    }
-    
     EGLDisplay display = eglGetCurrentDisplay();
     if (display == EGL_NO_DISPLAY) {
-        qDebug() << "No current EGL display";
+        qCDebug(KWIN_ANDROID_EGL) << "No current EGL display";
         return false;
     }
     
     // Check for required EGL extensions
     const char *extensions = eglQueryString(display, EGL_EXTENSIONS);
     if (!extensions) {
-        qDebug() << "Failed to query EGL extensions";
+        qCDebug(KWIN_ANDROID_EGL) << "Failed to query EGL extensions";
         return false;
     }
     
@@ -326,9 +573,9 @@ bool AndroidEglLayer::trySetupDirectRendering()
                        strstr(extensions, "EGL_KHR_image_base") != nullptr;
     
     if (!hasNativeBufferAndroid || !hasImageKHR) {
-        qDebug() << "Required EGL extensions not available:";
-        qDebug() << "  EGL_ANDROID_image_native_buffer:" << hasNativeBufferAndroid;
-        qDebug() << "  EGL_KHR_image:" << hasImageKHR;
+        qCDebug(KWIN_ANDROID_EGL) << "Required EGL extensions not available:";
+        qCDebug(KWIN_ANDROID_EGL) << "  EGL_ANDROID_image_native_buffer:" << hasNativeBufferAndroid;
+        qCDebug(KWIN_ANDROID_EGL) << "  EGL_KHR_image:" << hasImageKHR;
         return false;
     }
     
@@ -341,7 +588,7 @@ bool AndroidEglLayer::trySetupDirectRendering()
     }
     EGLClientBuffer clientBuffer = getNativeClientBufferAndroid(ahb);
     if (!clientBuffer) {
-        qDebug() << "Failed to get native client buffer from AHardwareBuffer";
+        qCDebug(KWIN_ANDROID_EGL) << "Failed to get native client buffer from AHardwareBuffer";
         return false;
     }
     
@@ -355,11 +602,27 @@ bool AndroidEglLayer::trySetupDirectRendering()
     
     if (m_eglImage == EGL_NO_IMAGE_KHR) {
         EGLint error = eglGetError();
-        qDebug() << "Failed to create EGLImage from AHardwareBuffer, error:" << Qt::hex << error;
+        qCDebug(KWIN_ANDROID_EGL) << "Failed to create EGLImage from AHardwareBuffer, error:" << Qt::hex << error;
         return false;
     }
     
-    // Create and bind texture from EGLImage
+    if (!setupDirectFramebuffer()) {
+        cleanupDirectRendering();
+        return false;
+    }
+
+    qInfo() << "Direct rendering through EGL_ANDROID_image_native_buffer setup successful";
+    qCDebug(KWIN_ANDROID_EGL) << "Buffer size:" << desc->width << "x" << desc->height << "format:" << desc->format;
+
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool AndroidEglLayer::setupDirectFramebuffer()
+{
+#ifdef __ANDROID__
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     using ImageTargetTexture2DProc = void(GL_APIENTRYP)(GLenum target, GLeglImageOES image);
@@ -370,6 +633,10 @@ bool AndroidEglLayer::trySetupDirectRendering()
         return false;
     }
     imageTargetTexture2D(GL_TEXTURE_2D, m_eglImage);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
     // Create framebuffer and attach texture
     glGenFramebuffers(1, &m_framebuffer);
@@ -378,24 +645,29 @@ bool AndroidEglLayer::trySetupDirectRendering()
     
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        qDebug() << "Framebuffer not complete:" << Qt::hex << status;
+        qCDebug(KWIN_ANDROID_EGL) << "Framebuffer not complete:" << Qt::hex << status;
         cleanupDirectRendering();
         return false;
     }
     
-    qInfo() << "Direct rendering to AHardwareBuffer setup successful";
-    qInfo() << "Buffer size:" << desc->width << "x" << desc->height << "format:" << desc->format;
-    
     return true;
-    
 #else
-    qDebug() << "AHardwareBuffer direct rendering is only available on Android";
     return false;
 #endif
 }
 
 void AndroidEglLayer::cleanupDirectRendering()
 {
+    if (m_framebuffer) {
+        glDeleteFramebuffers(1, &m_framebuffer);
+        m_framebuffer = 0;
+    }
+
+    if (m_texture) {
+        glDeleteTextures(1, &m_texture);
+        m_texture = 0;
+    }
+
     if (m_eglImage != EGL_NO_IMAGE_KHR) {
         EGLDisplay display = eglGetCurrentDisplay();
         if (display != EGL_NO_DISPLAY) {
@@ -409,16 +681,6 @@ void AndroidEglLayer::cleanup()
 {
     // Clean up direct rendering resources
     cleanupDirectRendering();
-    
-    if (m_framebuffer) {
-        glDeleteFramebuffers(1, &m_framebuffer);
-        m_framebuffer = 0;
-    }
-    
-    if (m_texture) {
-        glDeleteTextures(1, &m_texture);
-        m_texture = 0;
-    }
     
     // Don't release the buffer - it's a global shared resource
     m_buffer = nullptr;
@@ -444,25 +706,153 @@ void AndroidEglLayer::releaseBuffers()
     cleanup();
 }
 
+static const char *renderingModeName(AndroidEglBackend::RenderingMode mode)
+{
+    switch (mode) {
+    case AndroidEglBackend::RenderingMode::SystemGlesHardware:
+        return "system (Android EGL/GLES)";
+    case AndroidEglBackend::RenderingMode::ZinkHardware:
+        return "zink (Mesa on Vulkan)";
+    case AndroidEglBackend::RenderingMode::LlvmpipeSoftware:
+        return "llvmpipe (Mesa software)";
+    case AndroidEglBackend::RenderingMode::Fallback:
+        return "none";
+    }
+    Q_UNREACHABLE_RETURN("none");
+}
+
+// kwin-android-rendering-env owns these variables. Only report combinations
+// that make libepoxy or Mesa contradict the mode it selected, so a manual
+// launch with a half-configured environment is diagnosable from the log.
+static void warnAboutRenderingEnvironment(AndroidEglBackend::RenderingMode mode)
+{
+    const QByteArray termuxZink = qgetenv("TERMUX_ANDROID_ZINK");
+    // Mirrors the check in the patched libepoxy dispatch_common.c.
+    const bool epoxyLoadsMesa = !termuxZink.isEmpty() && termuxZink != "0";
+    const QByteArray mesaDriver = qgetenv("MESA_LOADER_DRIVER_OVERRIDE").toLower();
+    const QByteArray compose = qgetenv("KWIN_COMPOSE");
+
+    switch (mode) {
+    case AndroidEglBackend::RenderingMode::SystemGlesHardware:
+        if (epoxyLoadsMesa) {
+            qWarning() << "KWIN_ANDROID_GL_MODE=system but TERMUX_ANDROID_ZINK is set;"
+                       << "libepoxy will load Termux Mesa instead of the Android system EGL/GLES";
+        }
+        if (compose != "O2ES") {
+            qWarning() << "KWIN_ANDROID_GL_MODE=system expects KWIN_COMPOSE=O2ES, got" << compose;
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::ZinkHardware:
+        if (!epoxyLoadsMesa) {
+            qWarning() << "KWIN_ANDROID_GL_MODE=zink but TERMUX_ANDROID_ZINK is not set;"
+                       << "libepoxy will load the Android system EGL/GLES";
+        }
+        if (mesaDriver != "zink") {
+            qWarning() << "KWIN_ANDROID_GL_MODE=zink expects MESA_LOADER_DRIVER_OVERRIDE=zink, got" << mesaDriver;
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::LlvmpipeSoftware:
+        if (mesaDriver != "llvmpipe") {
+            qWarning() << "KWIN_ANDROID_GL_MODE=llvmpipe expects MESA_LOADER_DRIVER_OVERRIDE=llvmpipe, got" << mesaDriver;
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::Fallback:
+        break;
+    }
+}
+
+// The shell probe runs eglinfo before KWin starts; this checks what the
+// compositor context actually got, so a wrong libepoxy build or a stale
+// TERMUX_ANDROID_ZINK shows up in the log instead of as a silent fallback.
+static void verifyRendererMatchesMode(AndroidEglBackend::RenderingMode mode)
+{
+    const auto glString = [](GLenum name) {
+        const char *value = reinterpret_cast<const char *>(glGetString(name));
+        return QByteArray(value ? value : "");
+    };
+    const QByteArray vendor = glString(GL_VENDOR);
+    const QByteArray renderer = glString(GL_RENDERER);
+    const QByteArray lowerRenderer = renderer.toLower();
+    const bool mesaRenderer = vendor.startsWith("Mesa")
+        || lowerRenderer.contains("llvmpipe")
+        || lowerRenderer.contains("zink");
+
+    switch (mode) {
+    case AndroidEglBackend::RenderingMode::SystemGlesHardware:
+        if (mesaRenderer) {
+            qWarning() << "KWIN_ANDROID_GL_MODE=system but the compositor got a Mesa renderer:" << renderer
+                       << "- check the installed libepoxy and TERMUX_ANDROID_ZINK";
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::ZinkHardware:
+        if (!lowerRenderer.contains("zink")) {
+            qWarning() << "KWIN_ANDROID_GL_MODE=zink but the compositor got" << renderer;
+        } else if (lowerRenderer.contains("llvmpipe") || lowerRenderer.contains("lavapipe")) {
+            qWarning() << "Zink is running on a software Vulkan device:" << renderer;
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::LlvmpipeSoftware:
+        if (!lowerRenderer.contains("llvmpipe")) {
+            qWarning() << "KWIN_ANDROID_GL_MODE=llvmpipe but the compositor got" << renderer;
+        }
+        break;
+    case AndroidEglBackend::RenderingMode::Fallback:
+        break;
+    }
+}
+
+AndroidEglBackend::RenderingMode AndroidEglBackend::renderingModeFromEnvironment()
+{
+    // kwin-android-rendering-env (kwin_android_select_rendering) is the single
+    // place that probes the device. It exports the Mesa, libepoxy and Vulkan
+    // environment and leaves KWIN_ANDROID_GL_MODE resolved to exactly one of
+    // system, zink or llvmpipe. KWin consumes that value and never re-probes.
+    QByteArray mode = qgetenv("KWIN_ANDROID_GL_MODE").trimmed().toLower();
+    if (mode.isEmpty()) {
+        // Direct launch without the helper script: apply the documented default
+        // and export it so EglContext::createContext() sees the same mode.
+        mode = QByteArrayLiteral("system");
+        setenv("KWIN_ANDROID_GL_MODE", "system", 0);
+        setenv("KWIN_COMPOSE", "O2ES", 0);
+        qInfo() << "KWIN_ANDROID_GL_MODE is not set; defaulting to Android system EGL/GLES."
+                << "Source kwin-android-rendering-env and run kwin_android_select_rendering to choose a renderer.";
+    }
+
+    if (mode == "system") {
+        return RenderingMode::SystemGlesHardware;
+    }
+    if (mode == "zink") {
+        return RenderingMode::ZinkHardware;
+    }
+    if (mode == "llvmpipe") {
+        return RenderingMode::LlvmpipeSoftware;
+    }
+
+    qCritical() << "KWIN_ANDROID_GL_MODE" << mode << "is a renderer request, not a resolved renderer."
+                << "Run kwin_android_select_rendering from kwin-android-rendering-env before kwin_wayland;"
+                << "it resolves auto, turnip, kgsl, wrapper, hardware, gles and software to system, zink or llvmpipe.";
+    return RenderingMode::Fallback;
+}
+
 AndroidEglBackend::AndroidEglBackend(AndroidBackend *backend)
     : m_backend(backend)
 {
-    qInfo() << "Initializing Android EGL backend";
-    
-    // Detect best rendering mode
-    m_renderingMode = detectBestRenderingMode();
+    qCDebug(KWIN_ANDROID_EGL) << "Constructing Android EGL backend";
+
+    // Renderer selection is owned by kwin-android-rendering-env; consume it.
+    m_renderingMode = renderingModeFromEnvironment();
     m_eglAvailable = (m_renderingMode != RenderingMode::Fallback);
-    
-    if (!m_eglAvailable) {
-        qWarning() << "No EGL renderer is available";
+    if (m_eglAvailable) {
+        qInfo() << "Android renderer selected by KWIN_ANDROID_GL_MODE:" << renderingModeName(m_renderingMode);
+        warnAboutRenderingEnvironment(m_renderingMode);
     } else {
-        setupRendering(m_renderingMode);
+        qWarning() << "No EGL renderer is available";
     }
 }
 
 AndroidEglBackend::~AndroidEglBackend()
 {
-    qInfo() << "Destroying Android EGL backend";
+    qCDebug(KWIN_ANDROID_EGL) << "Destroying Android EGL backend";
     
     // Clean up layers
     for (AndroidEglLayer *layer : m_layers) {
@@ -473,7 +863,7 @@ AndroidEglBackend::~AndroidEglBackend()
 
 void AndroidEglBackend::init()
 {
-    qInfo() << "Initializing Android EGL backend";
+    qCDebug(KWIN_ANDROID_EGL) << "Initializing Android EGL backend";
     
     if (!initializeEgl()) {
         setFailed("Failed to initialize EGL");
@@ -494,14 +884,12 @@ void AndroidEglBackend::init()
 
 bool AndroidEglBackend::initializeEgl()
 {
-    qInfo() << "Initializing Android EGL backend";
+    qCDebug(KWIN_ANDROID_EGL) << "Initializing EGL display and context";
     if (!m_eglAvailable) {
         qCritical() << "No EGL renderer is available";
         return false;
     }
 
-    setupRendering(m_renderingMode);
-    
     const char *clientExtensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     const QByteArray clientExtensionsString = clientExtensions ? QByteArray(clientExtensions) : QByteArray();
 
@@ -510,16 +898,16 @@ bool AndroidEglBackend::initializeEgl()
     auto getPlatformDisplay = reinterpret_cast<GetPlatformDisplayExtProc>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     if (getPlatformDisplay && clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_KHR_platform_android"))) {
         display = getPlatformDisplay(EGL_PLATFORM_ANDROID_KHR, EGL_DEFAULT_DISPLAY, nullptr);
-        qInfo() << "Using Android EGL platform";
+        qCDebug(KWIN_ANDROID_EGL) << "Using Android EGL platform";
     }
     if (display == EGL_NO_DISPLAY && getPlatformDisplay
         && clientExtensionsString.split(' ').contains(QByteArrayLiteral("EGL_MESA_platform_surfaceless"))) {
         display = getPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
-        qInfo() << "Using surfaceless EGL platform";
+        qCDebug(KWIN_ANDROID_EGL) << "Using surfaceless EGL platform";
     }
 
     if (display == EGL_NO_DISPLAY) {
-        qInfo() << "Using default EGL display";
+        qCDebug(KWIN_ANDROID_EGL) << "Using default EGL display";
         display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     }
     if (display == EGL_NO_DISPLAY) {
@@ -565,6 +953,7 @@ bool AndroidEglBackend::initializeEgl()
     qInfo() << "OpenGL Vendor:" << (const char*)glGetString(GL_VENDOR);
     qInfo() << "OpenGL Renderer:" << (const char*)glGetString(GL_RENDERER);
     qInfo() << "OpenGL Version:" << (const char*)glGetString(GL_VERSION);
+    verifyRendererMatchesMode(m_renderingMode);
     
     return true;
 }
@@ -606,447 +995,12 @@ QList<OutputLayer *> AndroidEglBackend::compatibleOutputLayers(BackendOutput *ou
     return {};
 }
 
-bool AndroidEglBackend::isMesaAvailable()
-{
-    // Check if Mesa library is available
-    void *mesaLib = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
-    if (!mesaLib) {
-        mesaLib = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
-    }
-    
-    if (mesaLib) {
-        dlclose(mesaLib);
-        qInfo() << "Mesa library detected";
-        return true;
-    }
-    
-    // Check if mesa package is installed
-    if (QFile::exists("/data/data/com.termux/files/usr/lib/libGL.so") ||
-        QFile::exists("/data/data/com.termux/files/usr/lib/libGL.so.1")) {
-        qInfo() << "Mesa library found in Termux";
-        return true;
-    }
-    
-    qWarning() << "Mesa library not found";
-    return false;
-}
-
-bool AndroidEglBackend::isZinkAvailable()
-{
-    // Zink requires a Vulkan implementation, not a DRM render node. In native
-    // Termux an ICD can use Android's vendor Vulkan stack without exposing
-    // /dev/dri, so probe the Vulkan loader and its selected ICD directly.
-    void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
-    if (!vulkanLib) {
-        vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
-    }
-    
-    if (!vulkanLib) {
-        qInfo() << "Vulkan library not found - Zink not available";
-        return false;
-    }
-    
-    dlclose(vulkanLib);
-    return testVulkanDeviceEnumeration();
-}
-
-bool AndroidEglBackend::detectPRootEnvironment()
-{
-    // Check for PRoot-specific environment variables
-    if (getenv("PROOT_TMP_DIR") || getenv("PROOT_LOADER")) {
-        return true;
-    }
-    
-    // Check if we're in a chroot-like environment
-    QFile procMounts("/proc/mounts");
-    if (procMounts.open(QIODevice::ReadOnly)) {
-        QString content = procMounts.readAll();
-        if (content.contains("proot") || content.contains("bind")) {
-            return true;
-        }
-    }
-    
-    // Check for typical PRoot mount points
-    if (QFile::exists("/proc/version") && QFile::exists("/system/bin")) {
-        QFile version("/proc/version");
-        if (version.open(QIODevice::ReadOnly)) {
-            QString versionStr = version.readAll();
-            // PRoot often shows different kernel version than Android
-            if (!versionStr.contains("Android")) {
-                return true;
-            }
-        }
-    }
-    
-    return false;
-}
-
-bool AndroidEglBackend::detectContainerEnvironment()
-{
-    // Check for container-specific files
-    if (QFile::exists("/.dockerenv")) {
-        return true;
-    }
-    
-    // Check cgroup for container indicators
-    QFile cgroup("/proc/1/cgroup");
-    if (cgroup.open(QIODevice::ReadOnly)) {
-        QString content = cgroup.readAll();
-        if (content.contains("docker") || content.contains("lxc") || 
-            content.contains("systemd") || content.contains("container")) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-bool AndroidEglBackend::checkPRootGPUAccess()
-{
-    // In PRoot, GPU devices might be mapped differently
-    QStringList possiblePaths = {
-        "/dev/dri/card0",
-        "/dev/dri/renderD128",
-        "/dev/dri/renderD129",
-        "/sys/class/drm/card0",
-        "/proc/dri/0",
-        // PRoot might map these to different locations
-        "/dev/graphics/fb0",
-        "/dev/mali",
-        "/dev/kgsl-3d0"
-    };
-    
-    for (const QString &path : possiblePaths) {
-        if (QFile::exists(path)) {
-            qInfo() << "Found potential GPU device:" << path;
-            
-            // Try to open the device to test actual access
-            QFile device(path);
-            if (device.open(QIODevice::ReadOnly)) {
-                qInfo() << "GPU device accessible:" << path;
-                device.close();
-                return true;
-            } else {
-                qInfo() << "GPU device exists but not accessible:" << path;
-            }
-        }
-    }
-    
-    qInfo() << "PRoot: no accessible GPU device found";
-    return false;
-}
-
-bool AndroidEglBackend::testVulkanDeviceEnumeration()
-{
-    // Keep this probe dynamically linked: Vulkan is optional for the Android
-    // backend and KWin must still build where Vulkan headers are unavailable.
-    using VkResult = int32_t;
-    using VkInstance = void *;
-    using VkPhysicalDevice = void *;
-    constexpr VkResult VK_SUCCESS = 0;
-    constexpr uint32_t VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
-    constexpr uint32_t VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
-    constexpr uint32_t VK_API_VERSION_1_1 = (1U << 22) | (1U << 12);
-
-    struct VkApplicationInfo {
-        uint32_t sType;
-        const void *pNext;
-        const char *pApplicationName;
-        uint32_t applicationVersion;
-        const char *pEngineName;
-        uint32_t engineVersion;
-        uint32_t apiVersion;
-    };
-    struct VkInstanceCreateInfo {
-        uint32_t sType;
-        const void *pNext;
-        uint32_t flags;
-        const VkApplicationInfo *pApplicationInfo;
-        uint32_t enabledLayerCount;
-        const char *const *ppEnabledLayerNames;
-        uint32_t enabledExtensionCount;
-        const char *const *ppEnabledExtensionNames;
-    };
-    using CreateInstance = VkResult (*)(const VkInstanceCreateInfo *, const void *, VkInstance *);
-    using DestroyInstance = void (*)(VkInstance, const void *);
-    using EnumeratePhysicalDevices = VkResult (*)(VkInstance, uint32_t *, VkPhysicalDevice *);
-    struct VkExtensionProperties {
-        char extensionName[256];
-        uint32_t specVersion;
-    };
-    struct VkPhysicalDeviceFeatures2 {
-        uint32_t sType;
-        void *pNext;
-        uint32_t features[55];
-    };
-    struct VkPhysicalDeviceRobustness2FeaturesEXT {
-        uint32_t sType;
-        void *pNext;
-        uint32_t robustBufferAccess2;
-        uint32_t robustImageAccess2;
-        uint32_t nullDescriptor;
-    };
-    using EnumerateDeviceExtensionProperties = VkResult (*)(VkPhysicalDevice, const char *, uint32_t *, VkExtensionProperties *);
-    using GetPhysicalDeviceFeatures2 = void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *);
-    struct alignas(8) VkPhysicalDeviceProperties {
-        uint32_t apiVersion;
-        uint32_t driverVersion;
-        uint32_t vendorID;
-        uint32_t deviceID;
-        uint32_t deviceType;
-        char deviceName[256];
-        uint8_t pipelineCacheUUID[16];
-        uint8_t remainingProperties[4096];
-    };
-    using GetPhysicalDeviceProperties = void (*)(VkPhysicalDevice, VkPhysicalDeviceProperties *);
-    constexpr uint32_t VK_PHYSICAL_DEVICE_TYPE_CPU = 4;
-
-    void *vulkanLib = dlopen("libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
-    if (!vulkanLib) {
-        vulkanLib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
-    }
-    
-    if (!vulkanLib) {
-        return false;
-    }
-    
-    const auto createInstance = reinterpret_cast<CreateInstance>(dlsym(vulkanLib, "vkCreateInstance"));
-    const auto destroyInstance = reinterpret_cast<DestroyInstance>(dlsym(vulkanLib, "vkDestroyInstance"));
-    const auto enumeratePhysicalDevices = reinterpret_cast<EnumeratePhysicalDevices>(dlsym(vulkanLib, "vkEnumeratePhysicalDevices"));
-    const auto enumerateDeviceExtensionProperties = reinterpret_cast<EnumerateDeviceExtensionProperties>(dlsym(vulkanLib, "vkEnumerateDeviceExtensionProperties"));
-    const auto getPhysicalDeviceFeatures2 = reinterpret_cast<GetPhysicalDeviceFeatures2>(dlsym(vulkanLib, "vkGetPhysicalDeviceFeatures2"));
-    const auto getPhysicalDeviceProperties = reinterpret_cast<GetPhysicalDeviceProperties>(dlsym(vulkanLib, "vkGetPhysicalDeviceProperties"));
-    if (!createInstance || !destroyInstance || !enumeratePhysicalDevices || !enumerateDeviceExtensionProperties || !getPhysicalDeviceFeatures2 || !getPhysicalDeviceProperties) {
-        qWarning() << "Vulkan loader lacks required instance entry points";
-        dlclose(vulkanLib);
-        return false;
-    }
-
-    const VkApplicationInfo applicationInfo = {
-        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pNext = nullptr,
-        .pApplicationName = "kwin-android-zink-probe",
-        .applicationVersion = 0,
-        .pEngineName = "KWin",
-        .engineVersion = 0,
-        // vkGetPhysicalDeviceFeatures2 is a Vulkan 1.1 core command. With a
-        // Vulkan 1.0 instance, Turnip leaves the robustness2 feature chain
-        // untouched and nullDescriptor is incorrectly observed as false.
-        .apiVersion = VK_API_VERSION_1_1,
-    };
-    const VkInstanceCreateInfo createInfo = {
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .pApplicationInfo = &applicationInfo,
-        .enabledLayerCount = 0,
-        .ppEnabledLayerNames = nullptr,
-        .enabledExtensionCount = 0,
-        .ppEnabledExtensionNames = nullptr,
-    };
-    VkInstance instance = nullptr;
-    const VkResult createResult = createInstance(&createInfo, nullptr, &instance);
-    if (createResult != VK_SUCCESS || !instance) {
-        qWarning() << "Vulkan instance creation failed:" << createResult;
-        dlclose(vulkanLib);
-        return false;
-    }
-
-    uint32_t deviceCount = 0;
-    VkResult enumerateResult = enumeratePhysicalDevices(instance, &deviceCount, nullptr);
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    if (enumerateResult == VK_SUCCESS && deviceCount > 0) {
-        enumerateResult = enumeratePhysicalDevices(instance, &deviceCount, devices.data());
-        devices.resize(deviceCount);
-    }
-
-    bool zinkCompatibleHardwareFound = false;
-    if (enumerateResult == VK_SUCCESS) {
-        for (VkPhysicalDevice device : devices) {
-            VkPhysicalDeviceProperties properties = {};
-            getPhysicalDeviceProperties(device, &properties);
-            const bool isHardware = properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU;
-            uint32_t extensionCount = 0;
-            const VkResult extensionResult = enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-            std::vector<VkExtensionProperties> extensions(extensionCount);
-            if (extensionResult == VK_SUCCESS && extensionCount > 0) {
-                enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, extensions.data());
-                extensions.resize(extensionCount);
-            }
-            const bool hasRobustness2 = std::any_of(extensions.cbegin(), extensions.cend(), [](const VkExtensionProperties &extension) {
-                return std::strcmp(extension.extensionName, "VK_EXT_robustness2") == 0;
-            });
-            VkPhysicalDeviceRobustness2FeaturesEXT robustness2 = {
-                .sType = 1000286000,
-                .pNext = nullptr,
-                .robustBufferAccess2 = 0,
-                .robustImageAccess2 = 0,
-                .nullDescriptor = 0,
-            };
-            VkPhysicalDeviceFeatures2 features2 = {
-                .sType = 1000059000,
-                .pNext = &robustness2,
-                .features = {},
-            };
-            if (hasRobustness2) {
-                getPhysicalDeviceFeatures2(device, &features2);
-            }
-            const bool supportsNullDescriptor = hasRobustness2 && robustness2.nullDescriptor;
-            qInfo() << "Vulkan physical device:" << properties.deviceName
-                    << "type:" << properties.deviceType
-                    << "vendor:" << Qt::hex << properties.vendorID << Qt::dec
-                    << (isHardware ? "hardware" : "CPU")
-                    << "VK_EXT_robustness2.nullDescriptor:" << supportsNullDescriptor;
-            zinkCompatibleHardwareFound |= isHardware && supportsNullDescriptor;
-        }
-    }
-    destroyInstance(instance, nullptr);
-    dlclose(vulkanLib);
-    if (enumerateResult != VK_SUCCESS || deviceCount == 0 || !zinkCompatibleHardwareFound) {
-        qWarning() << "No Zink-compatible Vulkan device found:" << enumerateResult << "devices:" << deviceCount
-                   << "(Zink requires VK_EXT_robustness2 with nullDescriptor)";
-        return false;
-    }
-
-    qInfo() << "Vulkan ICD probe found a Zink-compatible hardware device among" << deviceCount << "physical device(s)";
-    return true;
-}
-
-AndroidEglBackend::RenderingMode AndroidEglBackend::detectBestRenderingMode()
-{
-    const QByteArray requestedMode = qgetenv("KWIN_ANDROID_GL_MODE").toLower();
-    if (requestedMode == "system" || requestedMode == "system-gles" || requestedMode == "gles") {
-        qInfo() << "KWIN_ANDROID_GL_MODE requests Android system GLES";
-        return RenderingMode::SystemGlesHardware;
-    }
-    if (requestedMode == "llvmpipe" || requestedMode == "software") {
-        qInfo() << "KWIN_ANDROID_GL_MODE requests llvmpipe";
-        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
-    }
-    if (requestedMode == "zink" || requestedMode == "hardware") {
-        qInfo() << "KWIN_ANDROID_GL_MODE requests zink";
-        if (isZinkAvailable() && isMesaAvailable()) {
-            return RenderingMode::ZinkHardware;
-        }
-        qWarning() << "Requested Zink rendering is unavailable; falling back to Android system GLES";
-        return RenderingMode::SystemGlesHardware;
-    }
-
-    const QByteArray mesaDriver = qgetenv("MESA_LOADER_DRIVER_OVERRIDE").toLower();
-    const QByteArray galliumDriver = qgetenv("GALLIUM_DRIVER").toLower();
-    if (mesaDriver == "llvmpipe" || mesaDriver == "swrast" || galliumDriver == "llvmpipe") {
-        qInfo() << "Existing Mesa environment requests llvmpipe";
-        return isMesaAvailable() ? RenderingMode::LlvmpipeSoftware : RenderingMode::Fallback;
-    }
-    if (mesaDriver == "zink" || galliumDriver == "zink") {
-        qInfo() << "Existing Mesa environment requests zink";
-        if (isZinkAvailable() && isMesaAvailable()) {
-            return RenderingMode::ZinkHardware;
-        }
-        qWarning() << "Configured Zink device is not hardware-backed; falling back to Android system GLES";
-        return RenderingMode::SystemGlesHardware;
-    }
-
-    // The Android backend defaults to the platform EGL/GLES implementation.
-    // This works without DRM devices or Vulkan feature emulation.
-    if (requestedMode.isEmpty()) {
-        qInfo() << "Selecting Android system GLES by default";
-        return RenderingMode::SystemGlesHardware;
-    }
-
-    // Priority order for explicitly configured Mesa paths:
-    // Zink (hardware) > llvmpipe (software) > fallback.
-    
-    if (isZinkAvailable() && isMesaAvailable()) {
-        qInfo() << "Zink hardware acceleration available";
-        return RenderingMode::ZinkHardware;
-    }
-    
-    if (isMesaAvailable()) {
-        qInfo() << "Mesa software rendering available";
-        return RenderingMode::LlvmpipeSoftware;
-    }
-    
-    qWarning() << "No Mesa support - falling back to QPainter";
-    return RenderingMode::Fallback;
-}
-
-void AndroidEglBackend::setupRendering(RenderingMode mode)
-{
-    // Android's compositor path uses OpenGL ES. Respect an explicit user value.
-    setenv("KWIN_COMPOSE", "O2ES", 0);
-    unsetenv("MESA_GLSL_VERSION_OVERRIDE");
-
-    switch (mode) {
-    case RenderingMode::SystemGlesHardware:
-        qInfo() << "Configuring Android system EGL/GLES hardware acceleration";
-        setenv("KWIN_COMPOSE", "O2ES", 1);
-        unsetenv("LIBGL_ALWAYS_SOFTWARE");
-        unsetenv("MESA_LOADER_DRIVER_OVERRIDE");
-        unsetenv("GALLIUM_DRIVER");
-        unsetenv("MESA_GL_VERSION_OVERRIDE");
-        unsetenv("MESA_GLES_VERSION_OVERRIDE");
-        unsetenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE");
-        unsetenv("MESA_NO_ERROR");
-        unsetenv("MESA_DEBUG");
-        break;
-    case RenderingMode::ZinkHardware:
-        qInfo() << "Configuring Mesa for Zink hardware acceleration";
-        
-        // Use Zink driver for hardware acceleration
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 1);
-        setenv("GALLIUM_DRIVER", "zink", 1);
-        setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1);
-        setenv("MESA_GLES_VERSION_OVERRIDE", "3.0", 1);
-        
-        // Enable hardware features
-        unsetenv("LIBGL_ALWAYS_SOFTWARE");
-        setenv("MESA_NO_ERROR", "1", 1);
-        
-        // Vulkan optimization
-        setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-        
-        qInfo() << "Zink hardware acceleration configured";
-        qInfo() << "GALLIUM_DRIVER=" << getenv("GALLIUM_DRIVER");
-        break;
-        
-    case RenderingMode::LlvmpipeSoftware:
-        qInfo() << "Configuring Mesa for llvmpipe software rendering";
-        
-        // Force software rendering
-        setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe", 1);
-        setenv("GALLIUM_DRIVER", "llvmpipe", 1);
-        setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1);
-        setenv("MESA_GLES_VERSION_OVERRIDE", "3.0", 1);
-        unsetenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE");
-        
-        // Optimize software rendering
-        setenv("MESA_NO_ERROR", "1", 1);
-        setenv("LP_NUM_THREADS", "4", 1);  // Use multiple CPU threads
-        
-        qInfo() << "Mesa software rendering configured";
-        qInfo() << "LIBGL_ALWAYS_SOFTWARE=" << getenv("LIBGL_ALWAYS_SOFTWARE");
-        break;
-        
-    case RenderingMode::Fallback:
-        qWarning() << "No Mesa rendering configured - will use QPainter fallback";
-        break;
-    }
-    
-    // Common Mesa settings
-    if (mode == RenderingMode::ZinkHardware || mode == RenderingMode::LlvmpipeSoftware) {
-        setenv("MESA_DEBUG", "silent", 1);
-        qInfo() << "Mesa rendering mode configured successfully";
-    }
-}
-
 // Buffer management is handled by termux-render library
 // No need to create/destroy buffers - they are global shared resources
 
 void AndroidEglBackend::addOutput(BackendOutput *output)
 {
-    qInfo() << "Adding output to EGL backend:" << output->name();
+    qCDebug(KWIN_ANDROID_EGL) << "Adding output to EGL backend:" << output->name();
     
     // Create layer for this output
     AndroidEglLayer *layer = new AndroidEglLayer(output, this);

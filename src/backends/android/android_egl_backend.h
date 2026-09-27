@@ -14,7 +14,9 @@
 #include "opengl/glframebuffer.h"
 
 #include <QObject>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 // Forward declare Buffer type from termux-render
 struct Buffer_Desc;
@@ -54,8 +56,18 @@ public:
     bool setupRenderTarget();
     void cleanup();
     
-    // Direct rendering support
-    bool trySetupDirectRendering();
+    // Output buffer import. The renderer pins exactly one of these; there is no
+    // implicit fallback between them (see resolveOutputImport()).
+    enum class OutputImport {
+        Native,   // EGL_NATIVE_BUFFER_ANDROID zero-copy, paired with system GLES
+        DmaBuf,   // dma-buf EGLImage zero-copy, paired with Mesa Zink
+        Readback, // CPU glReadPixels into the shared buffer, paired with llvmpipe
+        Invalid,
+    };
+    OutputImport resolveOutputImport() const;
+    bool trySetupDmaBufDirectRendering();
+    bool trySetupAndroidNativeBufferDirectRendering();
+    bool setupDirectFramebuffer();
     void cleanupDirectRendering();
 
 private:
@@ -67,6 +79,7 @@ private:
     Buffer *m_buffer = nullptr;
     GLuint m_texture = 0;
     GLuint m_framebuffer = 0;
+    std::vector<uint8_t> m_readbackBuffer;
     
     // AHardwareBuffer integration
     EGLImageKHR m_eglImage = EGL_NO_IMAGE_KHR;
@@ -79,8 +92,9 @@ private:
 /**
  * @brief EGL backend for Android.
  * 
- * The preferred path uses Android's system EGL/GLES. Zink and llvmpipe remain
- * available for comparison and fallback.
+ * The renderer (Android system EGL/GLES, Mesa Zink or llvmpipe) is chosen by
+ * the kwin-android-rendering-env shell helper, which probes the device and
+ * exports the environment. This backend only consumes that decision.
  */
 class AndroidEglBackend : public EglBackend
 {
@@ -99,24 +113,18 @@ public:
     // Android-specific methods
     AndroidBackend *androidBackend() const { return m_backend; }
     
-    // Rendering mode detection
+    // Renderer as resolved by kwin-android-rendering-env. The script leaves
+    // KWIN_ANDROID_GL_MODE set to system, zink or llvmpipe; anything else is
+    // an unresolved request and yields Fallback.
     enum class RenderingMode {
         SystemGlesHardware, // Android system EGL/GLES
-        ZinkHardware,      // Zink driver with GPU acceleration
-        LlvmpipeSoftware,  // llvmpipe software rendering
-        Fallback           // No EGL support
+        ZinkHardware,      // Mesa Zink on a Vulkan ICD
+        LlvmpipeSoftware,  // Mesa llvmpipe software rendering
+        Fallback           // No usable EGL renderer
     };
-    
-    static bool isMesaAvailable();
-    static bool isZinkAvailable();
-    static RenderingMode detectBestRenderingMode();
-    static void setupRendering(RenderingMode mode);
-    
-    // Environment detection
-    static bool detectPRootEnvironment();
-    static bool detectContainerEnvironment();
-    static bool checkPRootGPUAccess();
-    static bool testVulkanDeviceEnumeration();
+
+    static RenderingMode renderingModeFromEnvironment();
+    RenderingMode renderingMode() const { return m_renderingMode; }
     
     // Buffer management
     // Buffer management is handled by termux-render library

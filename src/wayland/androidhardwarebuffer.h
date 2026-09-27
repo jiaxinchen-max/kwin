@@ -9,6 +9,8 @@
 
 #include <QObject>
 
+#include <optional>
+
 struct AHardwareBuffer;
 
 namespace KWin
@@ -37,16 +39,26 @@ public:
 
     QSize size() const override;
     bool hasAlphaChannel() const override;
+    const DmaBufAttributes *dmabufAttributes() const override;
     const AndroidHardwareBufferAttributes *androidHardwareBufferAttributes() const override;
 
     static AndroidHardwareClientBuffer *get(wl_resource *resource);
 
 private:
+    enum class ImportMode {
+        Native,
+        DmaBuf,
+        Invalid,
+    };
+
+    static ImportMode importModeFromEnvironment();
     static void buffer_destroy_resource(wl_resource *resource);
     static void buffer_destroy(wl_client *client, wl_resource *resource);
     static const struct wl_buffer_interface implementation;
 
     AHardwareBuffer *m_buffer;
+    const ImportMode m_importMode;
+    std::optional<DmaBufAttributes> m_dmaBufAttributes;
     AndroidHardwareBufferAttributes m_attributes;
     QSize m_size;
     wl_resource *m_resource;

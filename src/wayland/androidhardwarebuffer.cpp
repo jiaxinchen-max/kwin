@@ -11,9 +11,15 @@
 #include "opengl/egldisplay.h"
 
 #include <android/hardware_buffer.h>
+#include <cerrno>
+#include <cstring>
 #include <dlfcn.h>
+#include <drm_fourcc.h>
 #include <epoxy/gl.h>
+#include <fcntl.h>
 #include <unistd.h>
+
+#include <QByteArray>
 
 namespace KWin
 {
@@ -21,15 +27,26 @@ namespace KWin
 static constexpr uint32_t s_version = 2;
 static constexpr uint32_t s_bgra8888Format = 5;
 
+struct NativeHandle
+{
+    int version;
+    int numFds;
+    int numInts;
+    int data[];
+};
+
 struct AndroidHardwareBufferApi
 {
+    using PlatformDlopen = void *(*)(const char *, int);
     using Receive = int (*)(int, AHardwareBuffer **);
     using Describe = void (*)(const AHardwareBuffer *, AHardwareBuffer_Desc *);
+    using GetNativeHandle = const NativeHandle *(*)(const AHardwareBuffer *);
     using Release = void (*)(AHardwareBuffer *);
 
     void *library = nullptr;
     Receive receive = nullptr;
     Describe describe = nullptr;
+    GetNativeHandle getNativeHandle = nullptr;
     Release release = nullptr;
 };
 
@@ -37,15 +54,45 @@ static const AndroidHardwareBufferApi &hardwareBufferApi()
 {
     static const AndroidHardwareBufferApi api = []() {
         AndroidHardwareBufferApi result;
-        result.library = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+        auto platformDlopen = reinterpret_cast<AndroidHardwareBufferApi::PlatformDlopen>(dlsym(RTLD_DEFAULT, "platform_dlopen"));
+        if (!platformDlopen) {
+            void *platformNamespaceLibrary = dlopen("libtermux-platform-ns.so", RTLD_NOW | RTLD_LOCAL);
+            if (platformNamespaceLibrary) {
+                platformDlopen = reinterpret_cast<AndroidHardwareBufferApi::PlatformDlopen>(dlsym(platformNamespaceLibrary, "platform_dlopen"));
+            }
+        }
+#if defined(__LP64__)
+        constexpr const char *systemLibAndroid = "/system/lib64/libandroid.so";
+#else
+        constexpr const char *systemLibAndroid = "/system/lib/libandroid.so";
+#endif
+        result.library = platformDlopen ? platformDlopen(systemLibAndroid, RTLD_NOW | RTLD_LOCAL) : nullptr;
+        if (!result.library) {
+            result.library = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+        }
         if (result.library) {
             result.receive = reinterpret_cast<AndroidHardwareBufferApi::Receive>(dlsym(result.library, "AHardwareBuffer_recvHandleFromUnixSocket"));
             result.describe = reinterpret_cast<AndroidHardwareBufferApi::Describe>(dlsym(result.library, "AHardwareBuffer_describe"));
+            result.getNativeHandle = reinterpret_cast<AndroidHardwareBufferApi::GetNativeHandle>(dlsym(result.library, "AHardwareBuffer_getNativeHandle"));
             result.release = reinterpret_cast<AndroidHardwareBufferApi::Release>(dlsym(result.library, "AHardwareBuffer_release"));
         }
         return result;
     }();
     return api;
+}
+
+static std::optional<uint32_t> drmFormatForHardwareBuffer(uint32_t format)
+{
+    switch (format) {
+    case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM:
+        return DRM_FORMAT_ABGR8888;
+    case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
+        return DRM_FORMAT_XBGR8888;
+    case s_bgra8888Format:
+        return DRM_FORMAT_ARGB8888;
+    default:
+        return std::nullopt;
+    }
 }
 
 static GLuint compileProbeShader(GLenum type, const char *source)
@@ -292,8 +339,22 @@ const struct wl_buffer_interface AndroidHardwareClientBuffer::implementation = {
     .destroy = buffer_destroy,
 };
 
+AndroidHardwareClientBuffer::ImportMode AndroidHardwareClientBuffer::importModeFromEnvironment()
+{
+    const QByteArray mode = qgetenv("KWIN_ANDROID_CLIENT_BUFFER_IMPORT").toLower();
+    if (mode.isEmpty() || mode == "native") {
+        return ImportMode::Native;
+    }
+    if (mode == "dmabuf") {
+        return ImportMode::DmaBuf;
+    }
+    qWarning() << "Unsupported KWIN_ANDROID_CLIENT_BUFFER_IMPORT value:" << mode;
+    return ImportMode::Invalid;
+}
+
 AndroidHardwareClientBuffer::AndroidHardwareClientBuffer(AHardwareBuffer *buffer, wl_client *client, uint32_t id, uint32_t flags)
     : m_buffer(buffer)
+    , m_importMode(importModeFromEnvironment())
     , m_resource(wl_resource_create(client, &wl_buffer_interface, 1, id))
 {
     AHardwareBuffer_Desc description = {};
@@ -306,6 +367,47 @@ AndroidHardwareClientBuffer::AndroidHardwareClientBuffer(AHardwareBuffer *buffer
         .flags = flags,
     };
     m_size = QSize(description.width, description.height);
+
+    if (m_importMode == ImportMode::DmaBuf) {
+        const auto &api = hardwareBufferApi();
+        const auto drmFormat = drmFormatForHardwareBuffer(description.format);
+        const NativeHandle *nativeHandle = api.getNativeHandle ? api.getNativeHandle(buffer) : nullptr;
+        if (!drmFormat) {
+            qWarning() << "AHardwareBuffer dma-buf export: unsupported format" << description.format;
+        } else if (!api.getNativeHandle) {
+            qWarning() << "AHardwareBuffer dma-buf export: AHardwareBuffer_getNativeHandle is unavailable";
+        } else if (!nativeHandle) {
+            qWarning() << "AHardwareBuffer dma-buf export: native handle is null";
+        } else if (nativeHandle->version < int(sizeof(NativeHandle))
+                   || nativeHandle->numFds < 1
+                   || nativeHandle->numInts < 0) {
+            qWarning() << "AHardwareBuffer dma-buf export: invalid native handle"
+                       << "version" << nativeHandle->version
+                       << "fds" << nativeHandle->numFds
+                       << "ints" << nativeHandle->numInts;
+        } else {
+            const int dmaBufFd = fcntl(nativeHandle->data[0], F_DUPFD_CLOEXEC, 0);
+            if (dmaBufFd >= 0) {
+                auto &attributes = m_dmaBufAttributes.emplace();
+                attributes.planeCount = 1;
+                attributes.width = description.width;
+                attributes.height = description.height;
+                attributes.format = *drmFormat;
+                attributes.modifier = DRM_FORMAT_MOD_INVALID;
+                attributes.fd[0] = FileDescriptor(dmaBufFd);
+                attributes.offset[0] = 0;
+                attributes.pitch[0] = description.stride * 4;
+                qDebug() << "AHardwareBuffer dma-buf export successful"
+                         << "size" << m_size
+                         << "format" << Qt::hex << attributes.format
+                         << "stride" << Qt::dec << description.stride
+                         << "native handle fds" << nativeHandle->numFds;
+            } else {
+                qWarning() << "AHardwareBuffer dma-buf export: failed to duplicate fd"
+                           << nativeHandle->data[0] << strerror(errno);
+            }
+        }
+    }
 
     if (!m_resource) {
         hardwareBufferApi().release(m_buffer);
@@ -349,8 +451,17 @@ bool AndroidHardwareClientBuffer::hasAlphaChannel() const
     }
 }
 
+const DmaBufAttributes *AndroidHardwareClientBuffer::dmabufAttributes() const
+{
+    return m_dmaBufAttributes ? &*m_dmaBufAttributes : nullptr;
+}
+
 const AndroidHardwareBufferAttributes *AndroidHardwareClientBuffer::androidHardwareBufferAttributes() const
 {
+    if (m_importMode == ImportMode::Invalid
+        || (m_importMode == ImportMode::DmaBuf && !m_dmaBufAttributes)) {
+        return nullptr;
+    }
     return &m_attributes;
 }
 

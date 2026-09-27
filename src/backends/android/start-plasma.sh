@@ -5,6 +5,7 @@ set -e
 
 INSTALL_DEPS=0
 VERBOSE_LOG=0
+DEBUG_RENDERING=0
 for arg in "$@"; do
     case "$arg" in
         --install-deps|-i)
@@ -13,18 +14,55 @@ for arg in "$@"; do
         -verbose|--verbose)
             VERBOSE_LOG=1
             ;;
+        --debug-rendering)
+            DEBUG_RENDERING=1
+            VERBOSE_LOG=1
+            ;;
+        --test-xwayland)
+            export KWIN_ANDROID_XWAYLAND_SELF_TEST=1
+            export KWIN_XWAYLAND_DEBUG=1
+            ;;
     esac
 done
 
 # 环境变量设置（日志初始化前）
 export PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
-export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$TMPDIR/runtime-$(id -u)}"
+export HOME="${HOME:-/data/data/com.termux/files/home}"
+# TermuxService may clear $PREFIX/tmp while native desktop processes are still
+# alive. Keep display sockets, locks and logs in a persistent per-user path.
+export KWIN_ANDROID_RUNTIME_ROOT="${KWIN_ANDROID_RUNTIME_ROOT:-$HOME/.termux/kwin-runtime}"
+export TMPDIR="${KWIN_ANDROID_TMPDIR:-$KWIN_ANDROID_RUNTIME_ROOT/tmp}"
+export XDG_RUNTIME_DIR="${KWIN_ANDROID_XDG_RUNTIME_DIR:-$KWIN_ANDROID_RUNTIME_ROOT/runtime-$(id -u)}"
 export KWIN_WAYLAND_SOCKET="${KWIN_WAYLAND_SOCKET:-wayland-0}"
 
-mkdir -p "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
+mkdir -p "$KWIN_ANDROID_RUNTIME_ROOT" "$XDG_RUNTIME_DIR" "$TMPDIR/.X11-unix"
 chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 1777 "$TMPDIR/.X11-unix" 2>/dev/null || true
+
+# Termux libX11/libxcb use $PREFIX/tmp/.X11-unix as their compiled-in Unix
+# socket directory. KWin follows TMPDIR when it creates the lazy Xwayland
+# socket, so expose the persistent socket directory at the legacy path too.
+X11_SOCKET_DIR="$TMPDIR/.X11-unix"
+X11_COMPAT_SOCKET_DIR="$PREFIX/tmp/.X11-unix"
+if [ "$X11_SOCKET_DIR" != "$X11_COMPAT_SOCKET_DIR" ]; then
+    mkdir -p "$PREFIX/tmp"
+    if [ -L "$X11_COMPAT_SOCKET_DIR" ]; then
+        if [ "$(readlink "$X11_COMPAT_SOCKET_DIR" 2>/dev/null || true)" != "$X11_SOCKET_DIR" ]; then
+            rm -f "$X11_COMPAT_SOCKET_DIR"
+            ln -s "$X11_SOCKET_DIR" "$X11_COMPAT_SOCKET_DIR"
+        fi
+    elif [ -d "$X11_COMPAT_SOCKET_DIR" ]; then
+        if rmdir "$X11_COMPAT_SOCKET_DIR" 2>/dev/null; then
+            ln -s "$X11_SOCKET_DIR" "$X11_COMPAT_SOCKET_DIR"
+        else
+            echo "Warning: $X11_COMPAT_SOCKET_DIR is not empty; X11 clients may not find the Xwayland socket" >&2
+        fi
+    elif [ -e "$X11_COMPAT_SOCKET_DIR" ]; then
+        echo "Warning: $X11_COMPAT_SOCKET_DIR exists and is not a directory" >&2
+    else
+        ln -s "$X11_SOCKET_DIR" "$X11_COMPAT_SOCKET_DIR"
+    fi
+fi
 
 SESSION_LOCK_DIR="$XDG_RUNTIME_DIR/start-plasma.lock"
 SESSION_LOCK_PID_FILE="$SESSION_LOCK_DIR/pid"
@@ -88,7 +126,7 @@ if [ -S "$KWIN_SOCKET_PATH" ]; then
     rm -f "$KWIN_SOCKET_PATH" "$KWIN_SOCKET_PATH.lock"
 fi
 
-PLASMA_LOG="${PLASMA_LOG:-$PREFIX/tmp/start-plasma.log}"
+PLASMA_LOG="${PLASMA_LOG:-$KWIN_ANDROID_RUNTIME_ROOT/start-plasma.log}"
 mkdir -p "$(dirname "$PLASMA_LOG")"
 : > "$PLASMA_LOG"
 exec 3>&1 4>&2
@@ -139,6 +177,14 @@ export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-$PREFIX/etc/xdg}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$PREFIX/share}"
 export XDG_MENU_PREFIX="${XDG_MENU_PREFIX:-plasma-}"
 export XCURSOR_THEME="${XCURSOR_THEME:-breeze_cursors}"
+if [ "$DEBUG_RENDERING" = "1" ]; then
+    export KWIN_ANDROID_DEBUG=1
+fi
+case "${KWIN_ANDROID_DEBUG:-0}" in
+    1|true|yes|on)
+        export QT_LOGGING_RULES="${QT_LOGGING_RULES:+${QT_LOGGING_RULES};}kwin.android.egl.debug=true"
+        ;;
+esac
 find_kactivitymanagerd() {
     local candidate
     for candidate in \
@@ -223,6 +269,7 @@ cleanup_session()
 
     trap - EXIT INT TERM
     for pid in \
+        "${XWAYLAND_SELF_TEST_PID:-}" \
         "${PLASMASHELL_PID:-}" \
         "${KACTIVITYMANAGERD_PID:-}" \
         "${KDED_PID:-}" \
@@ -233,6 +280,7 @@ cleanup_session()
         fi
     done
     for pid in \
+        "${XWAYLAND_SELF_TEST_PID:-}" \
         "${PLASMASHELL_PID:-}" \
         "${KACTIVITYMANAGERD_PID:-}" \
         "${KDED_PID:-}" \
@@ -263,6 +311,9 @@ echo "Environment setup complete:"
 echo "  Acceleration: $ACCELERATION_MODE"
 echo "  Mesa driver: ${MESA_LOADER_DRIVER_OVERRIDE:-default}"
 echo "  Vulkan ICD: ${VK_DRIVER_FILES:-${VK_ICD_FILENAMES:-Android system loader}}"
+echo "  Output buffer import: $KWIN_ANDROID_AHB_IMPORT"
+echo "  Client buffer import: $KWIN_ANDROID_CLIENT_BUFFER_IMPORT"
+echo "  termux-render receive: $TERMUX_RENDER_AHB_RECEIVE"
 echo ""
 
 # 启动D-Bus
@@ -331,8 +382,35 @@ if [ "$KWIN_READY" != "1" ]; then
     exit 1
 fi
 export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
+
+# KWin creates the lazy XWayland listening socket before spawning Xwayland.
+# Export its display so Plasma children and compatibility clients use the same
+# server instead of starting an independent display server on :0.
+if [ -n "${KWIN_XWAYLAND_DISPLAY:-}" ]; then
+    export DISPLAY="$KWIN_XWAYLAND_DISPLAY"
+else
+    unset DISPLAY
+    for socket_path in "$TMPDIR"/.X11-unix/X*; do
+        [ -S "$socket_path" ] || continue
+        display_number="${socket_path##*/X}"
+        if [[ "$display_number" =~ ^[0-9]+$ ]]; then
+            export DISPLAY=":$display_number"
+            break
+        fi
+    done
+fi
+
+KWIN_ANDROID_SESSION_ENV="${KWIN_ANDROID_SESSION_ENV:-$KWIN_ANDROID_RUNTIME_ROOT/session.env}"
+{
+    printf 'export DISPLAY=%q\n' "${DISPLAY:-}"
+    printf 'export WAYLAND_DISPLAY=%q\n' "$WAYLAND_DISPLAY"
+    printf 'export XDG_RUNTIME_DIR=%q\n' "$XDG_RUNTIME_DIR"
+    printf 'export TMPDIR=%q\n' "$TMPDIR"
+} > "$KWIN_ANDROID_SESSION_ENV"
+chmod 0600 "$KWIN_ANDROID_SESSION_ENV" 2>/dev/null || true
+
 if command -v dbus-update-activation-environment >/dev/null 2>&1; then
-    dbus-update-activation-environment WAYLAND_DISPLAY || true
+    dbus-update-activation-environment DISPLAY TMPDIR WAYLAND_DISPLAY XDG_RUNTIME_DIR || true
 fi
 
 # 启动Plasma组件
@@ -404,10 +482,57 @@ echo "  kate       # Text editor"
 echo ""
 echo "Usage:"
 echo "  $0                # Start Plasma (normal)"
+echo "  $0 --debug-rendering # Enable per-frame Android EGL diagnostics"
 echo "  $0 --install-deps # Install dependencies first"
+echo "  $0 --test-xwayland # Test xdpyinfo, glxinfo and glxgears"
 echo ""
 echo "Press Ctrl+C to stop..."
 echo "Plasma started successfully (KWin pid $KWIN_PID)." >&3
+
+if [ "${KWIN_ANDROID_XWAYLAND_SELF_TEST:-0}" = "1" ]; then
+    XWAYLAND_SELF_TEST_LOG="${KWIN_ANDROID_XWAYLAND_SELF_TEST_LOG:-$KWIN_ANDROID_RUNTIME_ROOT/xwayland-self-test.log}"
+    (
+        echo "DISPLAY=${DISPLAY:-unset}"
+        echo "TMPDIR=$TMPDIR"
+        if [ -z "${DISPLAY:-}" ]; then
+            echo "FAIL: no XWayland display socket was discovered"
+            exit 1
+        fi
+        if timeout 10 xdpyinfo >/dev/null 2>&1; then
+            echo "PASS: xdpyinfo connected"
+        else
+            status=$?
+            echo "FAIL: xdpyinfo could not connect (status $status)"
+            exit 1
+        fi
+
+        GL4ES_LIBRARY_PATH="$PREFIX/lib/gl4es"
+        if [ ! -f "$GL4ES_LIBRARY_PATH/libGL.so.1" ]; then
+            echo "FAIL: gl4es AHardwareBuffer client bridge is not installed"
+            exit 1
+        fi
+        TEST_LD_LIBRARY_PATH="$GL4ES_LIBRARY_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        GL4ES_FB_MODE="${KWIN_XWAYLAND_GL4ES_FB:-3}"
+        echo "Testing GLX through $GL4ES_LIBRARY_PATH/libGL.so.1"
+        if env LIBGL_FB="$GL4ES_FB_MODE" LD_LIBRARY_PATH="$TEST_LD_LIBRARY_PATH" timeout 15 glxinfo -B 2>&1; then
+            echo "PASS: gl4es created a GLX context"
+        else
+            echo "FAIL: gl4es could not create a GLX context"
+            exit 1
+        fi
+        echo "Starting glxgears for 8 seconds"
+        status=0
+        env LIBGL_FB="$GL4ES_FB_MODE" LD_LIBRARY_PATH="$TEST_LD_LIBRARY_PATH" timeout 8 glxgears -info 2>&1 || status=$?
+        if [ "${status:-0}" = "124" ]; then
+            echo "PASS: glxgears stayed alive until timeout"
+        else
+            echo "FAIL: glxgears exited with status ${status:-0}"
+            exit 1
+        fi
+    ) > "$XWAYLAND_SELF_TEST_LOG" 2>&1 &
+    XWAYLAND_SELF_TEST_PID=$!
+    echo "XWayland self-test started; log: $XWAYLAND_SELF_TEST_LOG" >&3
+fi
 
 set +e
 wait "$KWIN_PID"
