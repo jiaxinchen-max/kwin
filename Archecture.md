@@ -258,7 +258,7 @@ DBus 适配器在 `src/CMakeLists.txt` 里生成并链接，主要接口：
 
 | 路径 | 作用 |
 | --- | --- |
-| `src/backends/android/` | `AndroidBackend`、`AndroidOutput`、`AndroidEglBackend`、`AndroidQPainterBackend`，以及安装为 `start-plasma`、`kwin-android-rendering-env`、`kwin-x11-zink`、`kwin-glxgears-test`、`kwin-glxgears-zink-test` 的脚本和调试用 `debug-kwin.sh`。 |
+| `src/backends/android/` | `AndroidBackend`、`AndroidOutput`、`AndroidEglBackend`、`AndroidQPainterBackend`，以及安装为 `start-plasma`、`kwin-android-rendering-env`、`kwin-android-detect`、`kwin-x11-zink`、`kwin-glxgears-test`、`kwin-glxgears-zink-test` 的脚本和调试用 `debug-kwin.sh`。 |
 | `src/wayland/androidhardwarebuffer.*`、`src/wayland/protocols/termux-ahardware-buffer-v1.xml` | 私有 Wayland 协议 `termux_ahardware_buffer_manager_v1`，客户端 AHardwareBuffer 导入。 |
 | `src/core/`、`src/opengl/`、`src/scene/` | 为 AHardwareBuffer 增加的通用扩展，见"核心 KWin 改动"。 |
 | `packaging/` | termux-packages recipe、补丁与构建手册。 |
@@ -284,6 +284,8 @@ DBus 适配器在 `src/CMakeLists.txt` 里生成并链接，主要接口：
 | `auto` | 显式 ICD → Turnip/KGSL 探测 → 系统 GLES → llvmpipe | | 脚本默认值。 |
 
 系统 GLES 与 Mesa 的切换依赖定制 libepoxy：`TERMUX_ANDROID_ZINK=1` 时加载 `$PREFIX/lib/libEGL.so.1` 与 Mesa GLES，否则加载 `/system/lib64/libEGL.so`（补丁见 `packaging/libepoxy-dispatch-system-gles.patch`）。
+
+KWin 主程序不再自动探测，只消费一个已解析的模式。原 auto 的设备探测能力保留为独立只读工具 `kwin-android-detect`：它复用 `kwin-android-rendering-env` 的探测函数，逐个检测 system、zink、llvmpipe 是否可用并给出推荐模式和启动命令，但不启动 KWin、不改调用者环境。`--recommend` 只输出推荐模式，`--command` 输出可直接运行的 `start-plasma` 命令，`--explain-zink` 在 Vulkan 层逐设备说明 Zink 为何可用或不可用（复现被移除的 C++ 探测所做的硬件设备 + `VK_EXT_robustness2.nullDescriptor` 检查，并附 eglinfo 端到端结果）。
 
 `system` 模式下 `EglContext::createContext()` 优先申请 GLES 3 context，`EglDisplay::create()` 不再强制要求 `EGL_KHR_no_config_context` / `EGL_KHR_surfaceless_context`，config 通过 `eglChooseConfig()` 显式选取 pbuffer 配置。
 

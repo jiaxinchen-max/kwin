@@ -37,3 +37,8 @@ install(PROGRAMS kwin-glxgears-zink-test.sh
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     RENAME kwin-glxgears-zink-test
 )
+
+install(PROGRAMS kwin-android-detect.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kwin-android-detect
+)
