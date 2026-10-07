@@ -19,6 +19,10 @@
 #include <QOpenGLContext>
 #include <drm_fourcc.h>
 
+#ifdef __ANDROID__
+#include <android/hardware_buffer.h>
+#endif
+
 #ifndef EGL_DRM_RENDER_NODE_FILE_EXT
 #define EGL_DRM_RENDER_NODE_FILE_EXT 0x3377
 #endif
@@ -48,7 +52,7 @@ static epoxy_resolver_stub_t epoxyFailureHandler(const char *functionName)
     return epoxyFailureWorkaround;
 }
 
-std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, DrmDevice *drmDevice)
+std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, DrmDevice *drmDevice, bool requireConfiglessSurfaceless)
 {
     if (!display) {
         return nullptr;
@@ -79,14 +83,16 @@ std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, DrmDevice *
 
     const auto extensions = QByteArray(eglQueryString(display, EGL_EXTENSIONS)).split(' ');
 
-    const QByteArray requiredExtensions[] = {
-        QByteArrayLiteral("EGL_KHR_no_config_context"),
-        QByteArrayLiteral("EGL_KHR_surfaceless_context"),
-    };
-    for (const QByteArray &extensionName : requiredExtensions) {
-        if (!extensions.contains(extensionName)) {
-            qCWarning(KWIN_OPENGL) << extensionName << "extension is unsupported";
-            return nullptr;
+    if (requireConfiglessSurfaceless) {
+        const QByteArray requiredExtensions[] = {
+            QByteArrayLiteral("EGL_KHR_no_config_context"),
+            QByteArrayLiteral("EGL_KHR_surfaceless_context"),
+        };
+        for (const QByteArray &extensionName : requiredExtensions) {
+            if (!extensions.contains(extensionName)) {
+                qCWarning(KWIN_OPENGL) << extensionName << "extension is unsupported";
+                return nullptr;
+            }
         }
     }
 
@@ -394,7 +400,7 @@ static const auto s_disableUdmabuf = environmentVariableBoolValue("KWIN_DISABLE_
 
 EGLImageKHR EglDisplay::importBufferAsImage(GraphicsBuffer *buffer)
 {
-    Q_ASSERT(buffer->dmabufAttributes() || buffer->shmAttributes());
+    Q_ASSERT(buffer->dmabufAttributes() || buffer->shmAttributes() || buffer->androidHardwareBufferAttributes());
 
     std::pair key(buffer, 0);
     auto it = m_importCache.constFind(key);
@@ -409,6 +415,16 @@ EGLImageKHR EglDisplay::importBufferAsImage(GraphicsBuffer *buffer)
         // and on i915 there are glitches on some systems
     } else if (buffer->udmabufAttributes() && m_drmDevice && !s_disableUdmabuf.value_or(m_drmDevice->isNvidia() || m_drmDevice->isI915())) {
         image = importDmaBufAsImage(*buffer->udmabufAttributes());
+#ifdef __ANDROID__
+    } else if (const auto attributes = buffer->androidHardwareBufferAttributes()) {
+        using GetNativeClientBufferProc = EGLClientBuffer(EGLAPIENTRYP)(const AHardwareBuffer *buffer);
+        const auto getNativeClientBuffer = reinterpret_cast<GetNativeClientBufferProc>(eglGetProcAddress("eglGetNativeClientBufferANDROID"));
+        if (getNativeClientBuffer) {
+            const EGLClientBuffer clientBuffer = getNativeClientBuffer(static_cast<AHardwareBuffer *>(attributes->buffer));
+            const EGLint imageAttributes[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
+            image = createImage(EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, imageAttributes);
+        }
+#endif
     }
     m_importCache[key] = image;
     connect(buffer, &QObject::destroyed, this, [this, key]() {

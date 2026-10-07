@@ -17,6 +17,13 @@
 #include "utils/envvar.h"
 #include "utils/udev.h"
 
+#if defined(__ANDROID__) || defined(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+// The installed termux-render headers are C headers and may not provide C++ linkage guards.
+extern "C" {
+#include <termux/render/render.h>
+}
+#endif
+
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -26,6 +33,10 @@ namespace KWin
 {
 namespace LibInput
 {
+
+#if defined(__ANDROID__) || defined(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+#define KWIN_USE_TERMUX_LIBINPUT_CONTEXT 1
+#endif
 
 static void libinputLogHandler(libinput *libinput, libinput_log_priority priority, const char *format, va_list args)
 {
@@ -49,12 +60,27 @@ static void libinputLogHandler(libinput *libinput, libinput_log_priority priorit
 
 Context::Context(Session *session, std::unique_ptr<Udev> &&udev)
     : m_session(session)
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
+    , m_libinput(nullptr)
+    , m_termux_fd(-1)
+#else
     , m_libinput(libinput_udev_create_context(&Context::s_interface, this, *udev.get()))
+#endif
     , m_suspended(false)
     , m_udev(std::move(udev))
 {
-    libinput_log_set_priority(m_libinput, LIBINPUT_LOG_PRIORITY_DEBUG);
-    libinput_log_set_handler(m_libinput, &libinputLogHandler);
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
+    // Get termux-display-client event fd (real input events)
+    m_termux_fd = get_conn_fd();
+    if (m_termux_fd >= 0) {
+        // Create mock libinput context (just for API compatibility)
+        m_libinput = libinput_termux_create_context(&Context::s_interface, this, m_termux_fd);
+    }
+#endif
+    if (m_libinput) {
+        libinput_log_set_priority(m_libinput, LIBINPUT_LOG_PRIORITY_DEBUG);
+        libinput_log_set_handler(m_libinput, &libinputLogHandler);
+    }
 }
 
 Context::~Context()
@@ -69,7 +95,6 @@ bool Context::initialize()
     if (!isValid()) {
         return false;
     }
-
 #if HAVE_LIBINPUT_PLUGINS
     const bool wantsPlugins = !environmentVariableBoolValue("KWIN_LIBINPUT_NO_PLUGINS").value_or(false);
     if (wantsPlugins) {
@@ -78,7 +103,12 @@ bool Context::initialize()
     }
 #endif
 
+#ifdef KWIN_USE_TERMUX_LIBINPUT_CONTEXT
+    // For Termux, we don't need to assign seat
+    return true;
+#else
     return libinput_udev_assign_seat(m_libinput, m_session->seat().toUtf8().constData()) == 0;
+#endif
 }
 
 Session *Context::session() const

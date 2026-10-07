@@ -263,6 +263,12 @@ std::shared_ptr<GLTexture> EglBackend::importDmaBufAsTexture(const DmaBufAttribu
 
 bool EglBackend::testImportBuffer(GraphicsBuffer *buffer)
 {
+    if (buffer->androidHardwareBufferAttributes()) {
+        return importBufferAsImage(buffer) != EGL_NO_IMAGE_KHR;
+    }
+    if (!buffer->dmabufAttributes()) {
+        return false;
+    }
     const auto nonExternalOnly = m_renderDevice->eglDisplay()->nonExternalOnlySupportedDrmFormats();
     if (auto it = nonExternalOnly.find(buffer->dmabufAttributes()->format); it != nonExternalOnly.end() && it->contains(buffer->dmabufAttributes()->modifier)) {
         return importBufferAsImage(buffer) != EGL_NO_IMAGE_KHR;

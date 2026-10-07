@@ -79,6 +79,14 @@ void main(void)
     result = geometryColor * (1.0 - clamp(0.5 + f / df, 0.0, 1.0));
 #endif
 
+#if TRAIT_SWAP_RED_BLUE
+    result = result.bgra;
+#endif
+
+#if TRAIT_FORCE_OPAQUE
+    result.a = 1.0;
+#endif
+
 #if TRAIT_YUV_CONVERSION
     result.rgb = (yuvToRgb * vec4(result.rgb, 1.0)).rgb;
 #endif

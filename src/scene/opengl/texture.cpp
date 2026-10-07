@@ -28,6 +28,16 @@ QVarLengthArray<GLTexture *, 4> TextureOpenGL::planes() const
     return m_planes;
 }
 
+bool TextureOpenGL::needsRedBlueSwap() const
+{
+    return m_needsRedBlueSwap;
+}
+
+bool TextureOpenGL::needsForceOpaque() const
+{
+    return m_needsForceOpaque;
+}
+
 std::unique_ptr<ImageTextureOpenGL> ImageTextureOpenGL::create(const QImage &image)
 {
     auto texture = std::make_unique<ImageTextureOpenGL>();
@@ -83,6 +93,8 @@ bool BufferTextureOpenGL::attach(GraphicsBuffer *buffer, const std::shared_ptr<S
 {
     if (buffer->dmabufAttributes()) {
         return loadDmabufTexture(buffer, releasePoint);
+    } else if (buffer->androidHardwareBufferAttributes()) {
+        return loadAndroidHardwareBufferTexture(buffer, releasePoint);
     } else if (buffer->shmAttributes()) {
         if (EGLImageKHR image = m_backend->importBufferAsImage(buffer)) {
             return loadUDmabufTexture(buffer, image);
@@ -101,6 +113,8 @@ void BufferTextureOpenGL::attach(GraphicsBuffer *buffer, const Region &region, c
 {
     if (buffer->dmabufAttributes()) {
         updateDmabufTexture(buffer, releasePoint);
+    } else if (buffer->androidHardwareBufferAttributes()) {
+        updateAndroidHardwareBufferTexture(buffer, releasePoint);
     } else if (buffer->shmAttributes()) {
         if (EGLImageKHR image = m_backend->importBufferAsImage(buffer)) {
             updateUDmabufTexture(buffer, image, releasePoint);
@@ -126,6 +140,8 @@ void BufferTextureOpenGL::reset()
     m_bufferType = BufferType::None;
     m_size = QSize();
     m_releasePoint.reset();
+    m_needsRedBlueSwap = false;
+    m_needsForceOpaque = false;
 }
 
 static std::unique_ptr<GLTexture> createTexture(EGLImageKHR image, const QSize &size, bool isExternalOnly)
@@ -239,6 +255,9 @@ bool BufferTextureOpenGL::loadDmabufTexture(GraphicsBuffer *buffer, const std::s
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
     m_releasePoint = releasePoint;
+    const auto attributes = buffer->androidHardwareBufferAttributes();
+    m_needsRedBlueSwap = attributes && (attributes->flags & 2);
+    m_needsForceOpaque = attributes && (attributes->flags & 1);
 
     return true;
 }
@@ -273,6 +292,50 @@ void BufferTextureOpenGL::updateDmabufTexture(GraphicsBuffer *buffer, const std:
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
     m_releasePoint = releasePoint;
+    const auto attributes = buffer->androidHardwareBufferAttributes();
+    m_needsRedBlueSwap = attributes && (attributes->flags & 2);
+    m_needsForceOpaque = attributes && (attributes->flags & 1);
+}
+
+bool BufferTextureOpenGL::loadAndroidHardwareBufferTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint)
+{
+    auto texture = createTexture(m_backend->importBufferAsImage(buffer), buffer->size(), false);
+    if (!texture) {
+        qCWarning(KWIN_OPENGL) << "Invalid AHardwareBuffer-based wl_buffer";
+        return false;
+    }
+
+    m_planes = {texture.release()};
+    m_bufferType = BufferType::AndroidHardwareBuffer;
+    m_size = buffer->size();
+    m_isFloatingPoint = false;
+    m_releasePoint = releasePoint;
+    m_needsRedBlueSwap = buffer->androidHardwareBufferAttributes()->flags & 2;
+    m_needsForceOpaque = buffer->androidHardwareBufferAttributes()->flags & 1;
+    return true;
+}
+
+void BufferTextureOpenGL::updateAndroidHardwareBufferTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint)
+{
+    if (Q_UNLIKELY(m_bufferType != BufferType::AndroidHardwareBuffer)) {
+        reset();
+        attach(buffer, releasePoint);
+        return;
+    }
+
+    const EGLImageKHR image = m_backend->importBufferAsImage(buffer);
+    if (image == EGL_NO_IMAGE_KHR) {
+        qCWarning(KWIN_OPENGL) << "Invalid AHardwareBuffer-based wl_buffer";
+        return;
+    }
+
+    Q_ASSERT(m_planes.count() == 1);
+    m_planes[0]->bind();
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(image));
+    m_planes[0]->unbind();
+    m_releasePoint = releasePoint;
+    m_needsRedBlueSwap = buffer->androidHardwareBufferAttributes()->flags & 2;
+    m_needsForceOpaque = buffer->androidHardwareBufferAttributes()->flags & 1;
 }
 
 bool BufferTextureOpenGL::loadSinglePixelTexture(GraphicsBuffer *buffer)

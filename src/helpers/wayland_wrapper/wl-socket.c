@@ -29,6 +29,11 @@
 #define UNIX_PATH_MAX 108
 #endif
 
+/* Android compatibility: SUN_LEN macro */
+#ifndef SUN_LEN
+#define SUN_LEN(ptr) ((size_t)(((struct sockaddr_un *) 0)->sun_path) + strlen((ptr)->sun_path))
+#endif
+
 #define LOCK_SUFFIX ".lock"
 #define LOCK_SUFFIXLEN 5
 

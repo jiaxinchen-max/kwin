@@ -60,7 +60,7 @@ public:
     EGLImageKHR importBufferAsImage(GraphicsBuffer *buffer, int plane, int format, const QSize &size);
 
     static bool shouldUseOpenGLES();
-    static std::unique_ptr<EglDisplay> create(::EGLDisplay display, DrmDevice *drmDevice);
+    static std::unique_ptr<EglDisplay> create(::EGLDisplay display, DrmDevice *drmDevice, bool requireConfiglessSurfaceless = true);
 
 private:
     struct Formats

@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PROJECT_DEP_VERSION "6.7.0")
-set(QT_MIN_VERSION "6.10.0")
+set(QT_MIN_VERSION "6.10.2")
 set(KF6_MIN_VERSION "6.26.0")
 set(KDE_COMPILERSETTINGS_LEVEL "5.82")
 
@@ -53,6 +53,13 @@ option(KWIN_BUILD_TABBOX "Enable building of KWin Tabbox functionality" ON)
 option(KWIN_BUILD_X11 "Enable building X11 common code and Xwayland support" ON)
 option(KWIN_BUILD_GLOBALSHORTCUTS "Enable building of KWin with global shortcuts support" ON)
 option(KWIN_BUILD_RUNNERS "Enable building of KWin with krunner support" ON)
+option(KWIN_BUILD_ANDROID_AHARDWAREBUFFER "Enable the Termux AHardwareBuffer Wayland protocol" ${ANDROID})
+if (ANDROID)
+    set(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS_DEFAULT ON)
+else()
+    set(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS_DEFAULT OFF)
+endif()
+option(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS "Use KWin's bundled fake libinput/libudev implementation." ${KWIN_USE_BUNDLED_FAKE_INPUT_LIBS_DEFAULT})
 
 find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Concurrent
@@ -290,24 +297,32 @@ if (KWIN_BUILD_X11)
     set(XWAYLAND_SESSION_SCRIPTS "/etc/xdg/Xwayland-session.d")
 endif()
 
-find_package(Libinput 1.28)
-set_package_properties(Libinput PROPERTIES TYPE REQUIRED PURPOSE "Required for input handling on Wayland.")
-if (Libinput_VERSION VERSION_GREATER_EQUAL 1.30)
-    set(HAVE_LIBINPUT_PLUGINS 1)
-else()
+if (KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+    add_compile_definitions(KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+    add_subdirectory(src/fakeinputlibs)
     set(HAVE_LIBINPUT_PLUGINS 0)
+else()
+    find_package(Libinput 1.28)
+    set_package_properties(Libinput PROPERTIES TYPE REQUIRED PURPOSE "Required for input handling on Wayland.")
+    if (Libinput_VERSION VERSION_GREATER_EQUAL 1.30)
+        set(HAVE_LIBINPUT_PLUGINS 1)
+    else()
+        set(HAVE_LIBINPUT_PLUGINS 0)
+    endif()
 endif()
 
 find_package(Libeis-1.0 1.4)
 set_package_properties(Libeis-1.0 PROPERTIES TYPE OPTIONAL PURPOSE "Required for emulated input handling.")
 
-find_package(UDev)
-set_package_properties(UDev PROPERTIES
-    URL "https://www.freedesktop.org/wiki/Software/systemd/"
-    DESCRIPTION "Linux device library."
-    TYPE REQUIRED
-    PURPOSE "Required for input handling on Wayland."
-)
+if (NOT KWIN_USE_BUNDLED_FAKE_INPUT_LIBS)
+    find_package(UDev)
+    set_package_properties(UDev PROPERTIES
+        URL "https://www.freedesktop.org/wiki/Software/systemd/"
+        DESCRIPTION "Linux device library."
+        TYPE REQUIRED
+        PURPOSE "Required for input handling on Wayland."
+    )
+endif()
 
 find_package(Libdrm 2.4.118)
 set_package_properties(Libdrm PROPERTIES TYPE REQUIRED PURPOSE "Required for drm output on Wayland.")

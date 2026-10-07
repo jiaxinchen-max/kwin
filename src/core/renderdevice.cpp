@@ -269,7 +269,7 @@ void RenderDevice::handleVulkanDeviceLoss()
 
 void RenderDevice::createVulkanDevice()
 {
-    if (!*m_vulkanInstance) {
+    if (!m_device || !*m_vulkanInstance) {
         return;
     }
     m_vulkanDevice = openVulkanDevice(m_vulkanInstance, m_device.get());

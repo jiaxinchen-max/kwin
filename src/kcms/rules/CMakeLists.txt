@@ -28,6 +28,7 @@ endif()
 
 set(kcm_libs
     Qt::Quick
+    Qt::DBus
 
     KF6::KCMUtils
     KF6::I18n

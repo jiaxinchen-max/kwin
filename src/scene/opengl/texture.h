@@ -27,9 +27,13 @@ public:
     ~TextureOpenGL() override;
 
     QVarLengthArray<GLTexture *, 4> planes() const;
+    bool needsRedBlueSwap() const;
+    bool needsForceOpaque() const;
 
 protected:
     QVarLengthArray<GLTexture *, 4> m_planes;
+    bool m_needsRedBlueSwap = false;
+    bool m_needsForceOpaque = false;
 };
 
 class ImageTextureOpenGL : public TextureOpenGL
@@ -62,6 +66,8 @@ private:
     void updateShmTexture(GraphicsBuffer *buffer, const Region &region, const std::shared_ptr<SyncReleasePoint> &releasePoint);
     bool loadDmabufTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint);
     void updateDmabufTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint);
+    bool loadAndroidHardwareBufferTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint);
+    void updateAndroidHardwareBufferTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint);
     bool loadSinglePixelTexture(GraphicsBuffer *buffer);
     void updateSinglePixelTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint);
     bool loadUDmabufTexture(GraphicsBuffer *buffer, EGLImageKHR image);
@@ -71,6 +77,7 @@ private:
         None,
         Shm,
         DmaBuf,
+        AndroidHardwareBuffer,
         SinglePixel,
         UDmaBuf,
     };

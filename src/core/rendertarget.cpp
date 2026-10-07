@@ -17,6 +17,13 @@ RenderTarget::RenderTarget(GLFramebuffer *fbo, const std::shared_ptr<ColorDescri
 {
 }
 
+RenderTarget::RenderTarget(GLFramebuffer *fbo, OutputTransform transform, const std::shared_ptr<ColorDescription> &colorDescription)
+    : m_framebuffer(fbo)
+    , m_transform(transform)
+    , m_colorDescription(colorDescription)
+{
+}
+
 RenderTarget::RenderTarget(QImage *image, const std::shared_ptr<ColorDescription> &colorDescription)
     : m_image(image)
     , m_colorDescription(colorDescription)

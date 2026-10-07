@@ -7,6 +7,7 @@
 #include "xwaylandsocket.h"
 #include "xwayland_logging.h"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QFile>
 #include <QScopeGuard>
@@ -68,14 +69,34 @@ int UnixSocketAddress::size() const
     return m_buffer.size();
 }
 
+static QString x11TempDirectory()
+{
+    const QByteArray tmpDir = qgetenv("TMPDIR");
+    if (!tmpDir.isEmpty()) {
+        return QFile::decodeName(tmpDir);
+    }
+
+    const QByteArray prefix = qgetenv("PREFIX");
+    if (!prefix.isEmpty()) {
+        return QFile::decodeName(prefix + "/tmp");
+    }
+
+    return QStringLiteral("/tmp");
+}
+
+static QString x11SocketDirectory()
+{
+    return QStringLiteral("%1/.X11-unix").arg(x11TempDirectory());
+}
+
 static QString lockFileNameForDisplay(int display)
 {
-    return QStringLiteral("/tmp/.X%1-lock").arg(display);
+    return QStringLiteral("%1/.X%2-lock").arg(x11TempDirectory()).arg(display);
 }
 
 static QString socketFileNameForDisplay(int display)
 {
-    return QStringLiteral("/tmp/.X11-unix/X%1").arg(display);
+    return QStringLiteral("%1/X%2").arg(x11SocketDirectory()).arg(display);
 }
 
 static bool tryLockFile(const QString &lockFileName)
@@ -135,7 +156,9 @@ static int listen_helper(const QString &filePath, UnixSocketAddress::Type type, 
 static bool checkSocketsDirectory()
 {
     struct stat info;
-    const char *path = "/tmp/.X11-unix";
+    const QString socketsDirectory = x11SocketDirectory();
+    const QByteArray encodedPath = QFile::encodeName(socketsDirectory);
+    const char *path = encodedPath.constData();
 
     if (lstat(path, &info) != 0) {
         if (errno == ENOENT) {

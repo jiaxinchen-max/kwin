@@ -21,6 +21,7 @@ class KWIN_EXPORT RenderTarget
 {
 public:
     explicit RenderTarget(GLFramebuffer *fbo, const std::shared_ptr<ColorDescription> &colorDescription = ColorDescription::sRGB);
+    RenderTarget(GLFramebuffer *fbo, OutputTransform transform, const std::shared_ptr<ColorDescription> &colorDescription = ColorDescription::sRGB);
     explicit RenderTarget(QImage *image, const std::shared_ptr<ColorDescription> &colorDescription = ColorDescription::sRGB);
 
     QSize transformedSize() const;

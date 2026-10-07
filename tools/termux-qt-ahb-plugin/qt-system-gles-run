@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/sh
+set -eu
+
+: "${PREFIX:=/data/data/com.termux/files/usr}"
+: "${TMPDIR:=$PREFIX/tmp}"
+
+case "$(uname -m)" in
+    aarch64|x86_64|riscv64) system_egl=/system/lib64/libEGL.so ;;
+    arm*|i?86) system_egl=/system/lib/libEGL.so ;;
+    *) echo "qt-system-gles-run: unsupported ABI" >&2; exit 1 ;;
+esac
+
+runtime_dir="$TMPDIR/qt-system-gles"
+mkdir -p "$runtime_dir"
+ln -sf "$system_egl" "$runtime_dir/libEGL.so.1"
+
+# Do not append $PREFIX/lib here. The Termux dynamic linker already searches
+# it, while putting it in LD_LIBRARY_PATH can shadow Android EGL dependencies
+# such as libnativewindow.so.
+export LD_LIBRARY_PATH="$runtime_dir"
+export QT_QPA_PLATFORM=wayland
+export QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=termux-ahardware-buffer
+export QT_OPENGL=es2
+export QSG_RENDER_LOOP=basic
+
+exec "$@"

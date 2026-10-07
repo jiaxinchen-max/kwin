@@ -11,6 +11,8 @@
 #include "core/graphicsbuffer.h"
 #include "utils/memorymap.h"
 
+#include <QByteArray>
+
 #include <drm_fourcc.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -109,13 +111,21 @@ GraphicsBuffer *ShmGraphicsBufferAllocator::allocate(const GraphicsBufferOptions
 
     fcntl(fd.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
 #else
-    char templateName[] = "/tmp/kwin-shm-XXXXXX";
-    FileDescriptor fd{mkstemp(templateName)};
+    QByteArray tmpDir = qgetenv("TMPDIR");
+    if (tmpDir.isEmpty()) {
+        const QByteArray prefix = qgetenv("PREFIX");
+        tmpDir = prefix.isEmpty() ? QByteArray("/tmp") : prefix + "/tmp";
+    }
+    if (!tmpDir.endsWith('/')) {
+        tmpDir += '/';
+    }
+    QByteArray templateName = tmpDir + "kwin-shm-XXXXXX";
+    FileDescriptor fd{mkstemp(templateName.data())};
     if (!fd.isValid()) {
         return nullptr;
     }
 
-    unlink(templateName);
+    unlink(templateName.constData());
     int flags = fcntl(fd.get(), F_GETFD);
     if (flags == -1 || fcntl(fd.get(), F_SETFD, flags | FD_CLOEXEC) == -1) {
         return nullptr;

@@ -263,6 +263,12 @@ void ItemRendererOpenGL::createRenderNode(Item *item, RenderContext *context, co
                     .layerDebugBox = m_debug.layerEnabled ? std::optional(item->rect()) : std::nullopt,
                 });
                 renderNode.geometry.postProcessTextureCoordinates(texture->planes().at(0)->matrix(UnnormalizedCoordinates));
+                if (texture->needsRedBlueSwap()) {
+                    renderNode.traits |= ShaderTrait::SwapRedBlue;
+                }
+                if (texture->needsForceOpaque()) {
+                    renderNode.traits |= ShaderTrait::ForceOpaque;
+                }
                 if (surfaceItem->colorDescription()->yuvCoefficients() != YUVMatrixCoefficients::Identity) {
                     renderNode.traits |= ShaderTrait::YuvConversion;
                 }
