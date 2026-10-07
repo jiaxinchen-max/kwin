@@ -579,7 +579,7 @@ void Workspace::requestDpmsState(DpmsState state)
         input()->installInputEventFilter(m_dpmsFilter.get());
         m_dpmsTimer.start(animationTime);
         // TODO only do this if sleep is actually requested
-        m_sleepInhibitor = kwinApp()->outputBackend()->session()->delaySleep("dpms animation");
+        m_sleepInhibitor = kwinApp()->session()->delaySleep("dpms animation");
     }
 
     Q_EMIT dpmsStateChanged(animationTime);
@@ -1273,8 +1273,17 @@ LogicalOutput *Workspace::findOutput(LogicalOutput *reference, Direction directi
     }
 }
 
-LogicalOutput *Workspace::findOutput(BackendOutput *backendOutput) const
+static bool wantsToManage(const BackendOutput *output)
 {
+    return output->isEnabled() && !output->isNonDesktop();
+}
+
+LogicalOutput *Workspace::findOutput(const BackendOutput *backendOutput) const
+{
+    if (!wantsToManage(backendOutput)) {
+        return nullptr;
+    }
+
     const auto it = std::ranges::find_if(m_outputs, [backendOutput](LogicalOutput *logical) {
         return logical->backendOutput() == backendOutput
             || logical->uuid() == backendOutput->replicationSource();
@@ -1307,7 +1316,7 @@ void Workspace::updateOutputs()
     for (BackendOutput *output : availableOutputs) {
         output->setAutoRotateAvailable(m_orientationSensor->isAvailable());
         output->setAutoBrightnessAvailable(m_lightSensor->isAvailable());
-        if (output->isNonDesktop() || !output->isEnabled()) {
+        if (!wantsToManage(output)) {
             continue;
         }
         const auto replicationSource = std::ranges::find_if(availableOutputs, [output](BackendOutput *other) {
@@ -1363,7 +1372,7 @@ void Workspace::updateOutputs()
         output->backendOutput()->ref();
         m_tileManagers[output] = std::make_unique<TileManager>(output);
         Q_EMIT outputAdded(output);
-        wakeUp |= !m_recentlyRemovedDpmsOffOutputs.contains(output->uuid());
+        wakeUp |= !output->isPlaceholder() && !m_recentlyRemovedDpmsOffOutputs.contains(output->uuid());
     }
 
     m_placementTracker->inhibit();
@@ -3136,6 +3145,11 @@ Activities *Workspace::activities() const
     return m_activities.get();
 }
 #endif
+
+OutputConfigurationStore *Workspace::outputConfigureStore() const
+{
+    return m_outputConfigStore.get();
+}
 
 } // namespace
 

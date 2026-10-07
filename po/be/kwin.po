@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fc57ad16a28d02dea100ceb1c60de14e\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-02-24 02:42+0000\n"
+"POT-Creation-Date: 2026-04-24 02:42+0000\n"
 "PO-Revision-Date: 2024-11-11 19:00\n"
 "Last-Translator: Darafei Praliaskouski <komzpa@licei2.com>\n"
 "Language-Team: Belarusian\n"
@@ -34,30 +34,30 @@ msgctxt "EMAIL OF TRANSLATORS"
 msgid "Your emails"
 msgstr "ihar.hrachyshka@gmail.com, symbol@akeeri.tk, nashtlumach@gmail.com"
 
-#: backends/wayland/wayland_output.cpp:481
+#: backends/wayland/wayland_output.cpp:482
 #, kde-format
 msgid "Press right control to ungrab pointer"
 msgstr "Каб скасаваць захопліванне паказальніка, націсніце правую клавішу Ctrl"
 
-#: backends/wayland/wayland_output.cpp:483
+#: backends/wayland/wayland_output.cpp:484
 #, kde-format
 msgid "Press right control key to grab pointer"
 msgstr "Каб захапіць паказальнік, націсніце правую клавішу Ctrl"
 
-#: backends/wayland/wayland_output.cpp:487
+#: backends/wayland/wayland_output.cpp:488
 #, kde-format
 msgctxt ""
 "Title of nested KWin Wayland with Wayland socket identifier as argument"
 msgid "KDE Wayland Compositor %1"
 msgstr "Сродак кампазітынгу KDE Wayland %1"
 
-#: backends/wayland/wayland_output.cpp:490
+#: backends/wayland/wayland_output.cpp:491
 #, fuzzy, kde-format
 #| msgid "- Output disabled"
 msgid "- Output disabled"
 msgstr "- Вывад адключаны"
 
-#: backends/wayland/wayland_output.cpp:492
+#: backends/wayland/wayland_output.cpp:493
 #, fuzzy, kde-format
 #| msgid "- Output dimmed"
 msgid "- Output dimmed"
@@ -1488,12 +1488,12 @@ msgstr "Адключыць параметры канфігурацыі"
 msgid "Indicate that KWin has recently crashed n times"
 msgstr "Паказвае, што ў KWin нядаўна адбываўся збой n разоў"
 
-#: main_wayland.cpp:305
+#: main_wayland.cpp:303
 #, kde-format
 msgid "Start a rootless Xwayland server."
 msgstr "Запусціць сервер Xwayland не ад імя суперкарыстальніка."
 
-#: main_wayland.cpp:308
+#: main_wayland.cpp:306
 #, kde-format
 msgid ""
 "Name of the Wayland socket to listen on. If not set \"wayland-0\" is used."
@@ -1501,43 +1501,43 @@ msgstr ""
 "Назва сокета Wayland для назірання. Калі не вызначана, будзе выкарыстоўвацца "
 "\"wayland-0\"."
 
-#: main_wayland.cpp:312
+#: main_wayland.cpp:310
 #, kde-format
 msgid "The X11 Display to use in windowed mode on platform X11."
 msgstr "Дысплэй X11 для выкарыстання ў аконным рэжыме на платформе X11."
 
-#: main_wayland.cpp:316
+#: main_wayland.cpp:314
 #, kde-format
 msgid "The Wayland Display to use in windowed mode on platform Wayland."
 msgstr ""
 "Дысплэй Wayland для выкарыстання ў аконным рэжыме на платформе Wayland."
 
-#: main_wayland.cpp:318
+#: main_wayland.cpp:316
 #, kde-format
 msgid "Render to a virtual framebuffer."
 msgstr "Рэндэрынг у віртуальны буфер кадраў."
 
-#: main_wayland.cpp:320
+#: main_wayland.cpp:318
 #, kde-format
 msgid "The width for windowed mode. Default width is 1024."
 msgstr "Шырыня для аконнага рэжыму. Прадвызначаная шырыня - 1024."
 
-#: main_wayland.cpp:324
+#: main_wayland.cpp:322
 #, kde-format
 msgid "The height for windowed mode. Default height is 768."
 msgstr "Вышыня для аконнага рэжыму. Прадвызначаная вышыня - 768."
 
-#: main_wayland.cpp:329
+#: main_wayland.cpp:327
 #, kde-format
 msgid "Whether or not to make windowed mode fullscreen"
 msgstr ""
 
-#: main_wayland.cpp:333
+#: main_wayland.cpp:331
 #, kde-format
 msgid "The scale for windowed mode. Default value is 1."
 msgstr "Маштабаванне для аконнага рэжыму. Прадвызначанае значэнне - 1."
 
-#: main_wayland.cpp:338
+#: main_wayland.cpp:336
 #, kde-format
 msgid ""
 "The number of windows to open as outputs in windowed mode. Default value is 1"
@@ -1545,7 +1545,7 @@ msgstr ""
 "Колькасць акон, якія адкрываюцца як вывад у аконным рэжыме. Прадвызначанае "
 "значэнне - 1"
 
-#: main_wayland.cpp:343
+#: main_wayland.cpp:341
 #, kde-format
 msgid ""
 "Wayland socket to use for incoming connections. This can be combined with --"
@@ -1554,7 +1554,7 @@ msgstr ""
 "Сокет Wayland для ўваходных злучэнняў. Гэта можна спалучыць з --socket, каб "
 "назваць сокет"
 
-#: main_wayland.cpp:347
+#: main_wayland.cpp:345
 #, kde-format
 msgid ""
 "XWayland socket to use for Xwayland's incoming connections. This can be set "
@@ -1563,29 +1563,29 @@ msgstr ""
 "Сокет XWayland для ўваходных злучэнняў XWayland. Гэта можна вызначыць "
 "некалькі разоў"
 
-#: main_wayland.cpp:351
+#: main_wayland.cpp:349
 #, kde-format
 msgid "Name of the xwayland display that has been pre-set up"
 msgstr "Назва дысплэя xwayland, які быў папярэдне наладжаны"
 
-#: main_wayland.cpp:355
+#: main_wayland.cpp:353
 #, kde-format
 msgid "Name of the xauthority file "
 msgstr "Назва файла xauthority "
 
-#: main_wayland.cpp:359
+#: main_wayland.cpp:357
 #, kde-format
 msgid "Exits this instance so it can be restarted by kwin_wayland_wrapper."
 msgstr ""
 "Выходзіць з гэтага асобніка, каб яго можна было перазапусціць з дапамогай "
 "kwin_wayland_wrapper."
 
-#: main_wayland.cpp:361
+#: main_wayland.cpp:359
 #, kde-format
 msgid "Render through drm node."
 msgstr "Рэндэрынг праз вузел drm."
 
-#: main_wayland.cpp:362
+#: main_wayland.cpp:360
 #, kde-format
 msgid ""
 "Extract locale information from locale1 rather than the user's configuration"
@@ -1593,37 +1593,37 @@ msgstr ""
 "Атрымліваць інфармацыю пра лакаль з locale1, а не з канфігурацыі "
 "карыстальніка"
 
-#: main_wayland.cpp:389
+#: main_wayland.cpp:387
 #, kde-format
 msgid "Input method that KWin starts."
 msgstr "Метад уводу, які запускае KWin."
 
-#: main_wayland.cpp:395
+#: main_wayland.cpp:393
 #, kde-format
 msgid "Starts the session in locked mode."
 msgstr "Запускае сеанс у заблакаваным рэжыме."
 
-#: main_wayland.cpp:399
+#: main_wayland.cpp:397
 #, kde-format
 msgid "Starts the session without lock screen support."
 msgstr "Запускае сеанс без падтрымкі экрана блакавання."
 
-#: main_wayland.cpp:404
+#: main_wayland.cpp:402
 #, kde-format
 msgid "Starts the session without global shortcuts support."
 msgstr "Запускае сеанс без падтрымкі глабальных спалучэнняў клавіш."
 
-#: main_wayland.cpp:409
+#: main_wayland.cpp:407
 #, kde-format
 msgid "Disable KActivities integration."
 msgstr "Адключыць інтэграцыю KActivities."
 
-#: main_wayland.cpp:414
+#: main_wayland.cpp:412
 #, kde-format
 msgid "Exit after the session application, which is started by KWin, closed."
 msgstr "Выходзіць пасля закрыцця праграмы сеанса, што запускае KWin."
 
-#: main_wayland.cpp:419
+#: main_wayland.cpp:417
 #, kde-format
 msgid "Applications to start once Wayland and Xwayland server are started"
 msgstr "Праграмы, якія запускаюцца пасля запуску сервераў Wayland і Xwayland"
@@ -2210,7 +2210,7 @@ msgstr "Выдаліць апошні след мышы"
 msgid "Clear Mouse Marks"
 msgstr "Выдаліць сляды мышы"
 
-#: plugins/mousemark/mousemark_config.cpp:87
+#: plugins/mousemark/mousemark_config.cpp:88
 #, kde-format
 msgctxt "Suffix"
 msgid " pixel"
@@ -4162,72 +4162,72 @@ msgstr "Актываваць акно (%1)"
 msgid "unknown"
 msgstr "невядома"
 
-#: virtualdesktops.cpp:731 virtualdesktops.cpp:810
+#: virtualdesktops.cpp:732 virtualdesktops.cpp:811
 #, kde-format
 msgid "Desktop %1"
 msgstr "Працоўны стол %1"
 
-#: virtualdesktops.cpp:817
+#: virtualdesktops.cpp:818
 #, kde-format
 msgid "Switch to Next Desktop"
 msgstr "Пераключыцца на наступны працоўны стол"
 
-#: virtualdesktops.cpp:818
+#: virtualdesktops.cpp:819
 #, kde-format
 msgid "Switch to Previous Desktop"
 msgstr "Пераключыцца на папярэдні працоўны стол"
 
-#: virtualdesktops.cpp:821
+#: virtualdesktops.cpp:822
 #, kde-format
 msgid "Switch One Desktop to the Right"
 msgstr "Пераключыцца на працоўны стол справа"
 
-#: virtualdesktops.cpp:822
+#: virtualdesktops.cpp:823
 #, kde-format
 msgid "Switch One Desktop to the Left"
 msgstr "Пераключыцца на працоўны стол злева"
 
-#: virtualdesktops.cpp:823
+#: virtualdesktops.cpp:824
 #, kde-format
 msgid "Switch One Desktop Up"
 msgstr "Пераключыцца на працоўны стол вышэй"
 
-#: virtualdesktops.cpp:824
+#: virtualdesktops.cpp:825
 #, kde-format
 msgid "Switch One Desktop Down"
 msgstr "Пераключыцца на працоўны стол ніжэй"
 
-#: virtualdesktops.cpp:912
+#: virtualdesktops.cpp:913
 #, kde-format
 msgid "Switch to Desktop %1"
 msgstr "Пераключыцца на працоўны стол \"%1\""
 
-#: wayland/outputmanagement_v2.cpp:602
+#: wayland/outputmanagement_v2.cpp:603
 #, kde-format
 msgid "One of the relevant outputs is no longer available"
 msgstr ""
 
-#: wayland/outputmanagement_v2.cpp:620
+#: wayland/outputmanagement_v2.cpp:621
 #, kde-format
 msgid "Disabling all outputs through configuration changes is not allowed"
 msgstr ""
 
-#: wayland/outputmanagement_v2.cpp:637
+#: wayland/outputmanagement_v2.cpp:638
 #, kde-format
 msgid "Cannot add a custom mode with an empty size"
 msgstr ""
 
-#: wayland/outputmanagement_v2.cpp:641
+#: wayland/outputmanagement_v2.cpp:642
 #, kde-format
 msgid "Cannot add a custom mode with a refresh rate of zero Hz"
 msgstr ""
 
-#: wayland/outputmanagement_v2.cpp:659
+#: wayland/outputmanagement_v2.cpp:660
 #, kde-format
 msgid "Position of output %s is way too large (%d, %d)"
 msgstr ""
 
-#: wayland/outputmanagement_v2.cpp:676
+#: wayland/outputmanagement_v2.cpp:677
 #, kde-format
 msgid "The driver rejected the output configuration"
 msgstr ""
@@ -4238,7 +4238,7 @@ msgctxt "Application is not responding, appended to window title"
 msgid "(Not Responding)"
 msgstr "(Не адказвае)"
 
-#: workspace.cpp:1755
+#: workspace.cpp:1764
 #, kde-format
 msgctxt "Introductory text shown in the support information."
 msgid ""

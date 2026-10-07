@@ -129,21 +129,6 @@ bool DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nano
     return m_pipeline->presentAsync(layer, allowedVrrDelay);
 }
 
-QList<std::shared_ptr<OutputMode>> DrmOutput::getModes(const State &state) const
-{
-    const auto drmModes = m_pipeline->connector()->modes();
-
-    QList<std::shared_ptr<OutputMode>> ret;
-    ret.reserve(drmModes.count());
-    for (const auto &drmMode : drmModes) {
-        ret.append(drmMode);
-    }
-    for (const auto &custom : state.customModes) {
-        ret.append(m_pipeline->connector()->generateMode(custom.size, custom.refreshRate / 1000.0f, custom.flags | OutputMode::Flag::Custom));
-    }
-    return ret;
-}
-
 DrmPlane::Transformations outputToPlaneTransform(OutputTransform transform)
 {
     using PlaneTrans = DrmPlane::Transformation;
@@ -175,16 +160,51 @@ void DrmOutput::updateConnectorProperties()
     updateInformation();
 
     State next = m_state;
-    next.modes = getModes(next);
-    if (!next.currentMode) {
-        // some mode needs to be set
-        next.currentMode = next.modes.constFirst();
-    }
-    if (!next.modes.contains(next.currentMode)) {
-        next.currentMode->setRemoved();
-        next.modes.push_front(next.currentMode);
-    }
+    populateModes(&next);
     setState(next);
+}
+
+void DrmOutput::populateModes(State *next) const
+{
+    next->modes.clear();
+
+    const auto drmModes = m_pipeline->connector()->modes();
+    for (const auto &drmMode : drmModes) {
+        next->modes.append(drmMode);
+    }
+
+    for (const auto &custom : next->customModes) {
+        next->modes.append(m_pipeline->connector()->generateMode(custom.size, custom.refreshRate / 1000.0f, custom.flags | OutputMode::Flag::Custom));
+    }
+
+    static const bool noCustomModeQuirk = qEnvironmentVariableIntValue("KWIN_DRM_NO_CUSTOM_MODE_QUIRK");
+    if (!noCustomModeQuirk) {
+        if (!next->desiredModeSize.isEmpty() && next->desiredModeRefreshRate && next->desiredModeFlags) {
+            for (const auto &mode : std::as_const(next->modes)) {
+                const auto drmMode = std::static_pointer_cast<DrmConnectorMode>(mode);
+                if (next->desiredModeSize == mode->size() && next->desiredModeRefreshRate == drmMode->refreshRate() && next->desiredModeFlags == drmMode->flags()) {
+                    next->currentMode = drmMode;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!next->currentMode) {
+        next->currentMode = next->modes.constFirst();
+    } else if (!next->modes.contains(next->currentMode)) {
+        const auto it = std::ranges::find_if(next->modes, [&](const auto &mode) {
+            return next->currentMode->size() == mode->size()
+                && next->currentMode->refreshRate() == mode->refreshRate()
+                && next->currentMode->flags() == mode->flags();
+        });
+        if (it != next->modes.end()) {
+            next->currentMode = *it;
+        } else {
+            next->currentMode->setRemoved();
+            next->modes.push_front(next->currentMode);
+        }
+    }
 }
 
 static const bool s_allowColorspaceIntel = qEnvironmentVariableIntValue("KWIN_DRM_ALLOW_INTEL_COLORSPACE") == 1;
@@ -335,7 +355,9 @@ void DrmOutput::repairPresentation()
 {
     // read back drm properties, most likely our info is out of date somehow
     // or we need a modeset
-    QTimer::singleShot(0, m_gpu->platform(), &DrmBackend::updateOutputs);
+    QTimer::singleShot(0, m_gpu->platform(), [backend = m_gpu->platform()]() {
+        backend->updateOutputs();
+    });
 }
 
 bool DrmOutput::overlayLayersLikelyBroken() const
@@ -407,16 +429,18 @@ std::shared_ptr<ColorDescription> DrmOutput::createColorDescription(const State 
 {
     const bool effectiveHdr = next.highDynamicRange && (capabilities() & Capability::HighDynamicRange);
     const bool effectiveWcg = next.wideColorGamut && (capabilities() & Capability::WideColorGamut);
-    double brightness = next.currentBrightness.value_or(next.brightnessSetting);
+    double brightnessFactor = 1.0;
+    if ((!next.brightnessDevice && next.allowSdrSoftwareBrightness) || effectiveHdr) {
+        brightnessFactor = next.currentBrightness.value_or(next.brightnessSetting);
+    }
     if (!next.brightnessDevice || next.brightnessDevice->usesDdcCi()) {
-        brightness *= next.currentDimming;
+        brightnessFactor *= next.currentDimming;
     }
 
     if (next.colorProfileSource == ColorProfileSource::ICC && !effectiveHdr && !effectiveWcg && next.iccProfile) {
         const double maxFALL = next.iccProfile->maxFALL().value_or(200);
         const double minBrightness = next.iccProfile->relativeBlackPoint().value_or(0) * maxFALL;
         const auto sdrColor = Colorimetry::BT709.interpolateGamutTo(next.iccProfile->colorimetry(), next.sdrGamutWideness);
-        const double brightnessFactor = (!next.brightnessDevice && next.allowSdrSoftwareBrightness) ? brightness : 1.0;
         const double effectiveReferenceLuminance = 5 + (maxFALL - 5) * brightnessFactor;
 
         return std::make_shared<ColorDescription>(ColorDescription{
@@ -448,7 +472,6 @@ std::shared_ptr<ColorDescription> DrmOutput::createColorDescription(const State 
     // to work around that, (unless overridden by the user), assume the min. luminance of the transfer function instead
     const double minBrightness = effectiveHdr ? next.minBrightnessOverride.value_or(transferFunction.minLuminance) : transferFunction.minLuminance;
 
-    const double brightnessFactor = (!next.brightnessDevice && next.allowSdrSoftwareBrightness) || effectiveHdr ? brightness : 1.0;
     const double effectiveReferenceLuminance = 5 + (referenceLuminance - 5) * brightnessFactor;
     return std::make_shared<ColorDescription>(ColorDescription{
         containerColorimetry,
@@ -494,6 +517,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->brightnessSetting = props->brightness.value_or(m_state.brightnessSetting);
     m_nextState->desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
     m_nextState->desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+    m_nextState->desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
     m_nextState->allowSdrSoftwareBrightness = props->allowSdrSoftwareBrightness.value_or(m_state.allowSdrSoftwareBrightness);
     m_nextState->colorPowerTradeoff = props->colorPowerTradeoff.value_or(m_state.colorPowerTradeoff);
     m_nextState->dimming = props->dimming.value_or(m_state.dimming);
@@ -515,7 +539,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->dpmsMode = props->dpmsMode.value_or(m_state.dpmsMode);
     if (props->customModes.has_value()) {
         m_nextState->customModes = *props->customModes;
-        m_nextState->modes = getModes(*m_nextState);
+        populateModes(&*m_nextState);
     }
     m_nextState->maxPossibleArtificialHdrHeadroom = calculateMaxArtificialHdrHeadroom(*m_nextState);
     m_nextState->originalColorDescription = createColorDescription(*m_nextState);
@@ -713,7 +737,7 @@ void DrmOutput::tryKmsColorOffloading(State &next)
         }
     }
     m_pipeline->setCrtcColorPipeline(colorPipeline);
-    if (DrmPipeline::commitPipelines({m_pipeline}, DrmPipeline::CommitMode::Test) == DrmPipeline::Error::None) {
+    if (DrmPipeline::commitPipelines({m_pipeline}, m_gpu, DrmPipeline::CommitMode::Test) == DrmPipeline::Error::None) {
         m_pipeline->applyPendingChanges();
         next.layerBlendingColor = next.blendingColor;
         m_needsShadowBuffer = false;
@@ -726,7 +750,7 @@ void DrmOutput::tryKmsColorOffloading(State &next)
         ColorPipeline simplerPipeline(ValueRange{0, 1}, ColorspaceType::NonLinearRGB);
         simplerPipeline.addMatrix(next.blendingColor->toOther(*encoding, RenderingIntent::AbsoluteColorimetricNoAdaptation), colorPipeline.currentOutputRange(), ColorspaceType::NonLinearRGB);
         m_pipeline->setCrtcColorPipeline(simplerPipeline);
-        if (DrmPipeline::commitPipelines({m_pipeline}, DrmPipeline::CommitMode::Test) == DrmPipeline::Error::None) {
+        if (DrmPipeline::commitPipelines({m_pipeline}, m_gpu, DrmPipeline::CommitMode::Test) == DrmPipeline::Error::None) {
             m_pipeline->applyPendingChanges();
             next.layerBlendingColor = next.blendingColor;
             m_needsShadowBuffer = false;

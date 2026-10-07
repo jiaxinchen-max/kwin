@@ -16,6 +16,7 @@
 #include "main.h"
 #include "opengl/eglbackend.h"
 #include "opengl/eglnativefence.h"
+#include "opengl/glframebuffer.h"
 #include "opengl/glplatform.h"
 #include "opengl/gltexture.h"
 #include "pipewirecore.h"
@@ -745,7 +746,7 @@ QList<const spa_pod *> ScreenCastStream::buildFormats(bool fixate, char buffer[2
 
     spa_pod_builder podBuilder = SPA_POD_BUILDER_INIT(buffer, 2048);
     spa_fraction defFramerate = SPA_FRACTION(0, 1);
-    spa_fraction minFramerate = SPA_FRACTION(1, 1);
+    spa_fraction minFramerate = SPA_FRACTION(0, 1);
     spa_fraction maxFramerate = SPA_FRACTION(m_source->refreshRate() / 1000, 1);
 
     spa_rectangle resolution = SPA_RECTANGLE(uint32_t(m_resolution.width()), uint32_t(m_resolution.height()));
@@ -891,6 +892,22 @@ std::optional<ScreenCastDmaBufTextureParams> ScreenCastStream::testCreateDmaBuf(
 
     const DmaBufAttributes *attrs = buffer->dmabufAttributes();
     if (!attrs) {
+        return std::nullopt;
+    }
+
+    // Also test if we can actually create the framebuffer,
+    // since this may fail on some drivers with some modifiers
+    // (namely Nvidia with the implicit modifier)
+    if (!backend->openglContext()->makeCurrent()) {
+        return std::nullopt;
+    }
+
+    auto texture = backend->importDmaBufAsTexture(*attrs);
+    if (!texture) {
+        return std::nullopt;
+    }
+    auto framebuffer = std::make_unique<GLFramebuffer>(texture.get());
+    if (!framebuffer->valid()) {
         return std::nullopt;
     }
 

@@ -136,6 +136,8 @@ X11Window::X11Window()
 
     connect(clientMachine(), &ClientMachine::localhostChanged, this, &X11Window::updateCaption);
     connect(options, &Options::condensedTitleChanged, this, &X11Window::updateCaption);
+    connect(workspace(), &Workspace::dpmsStateChanged, this, &X11Window::updateVisibility);
+    connect(waylandServer(), &WaylandServer::lockStateChanged, this, &X11Window::updateVisibility);
 
     m_releaseTimer.setSingleShot(true);
     connect(&m_releaseTimer, &QTimer::timeout, this, [this]() {
@@ -669,9 +671,9 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     const QSizeF constrainedClientSize = constrainClientSize(geom.size());
     resize(rules()->checkSize(clientSizeToFrameSize(constrainedClientSize), !isMapped));
 
-    QPointF forced_pos = rules()->checkPositionSafe(invalidPoint, !isMapped);
-    if (forced_pos != invalidPoint) {
-        place(forced_pos);
+    const auto forced_pos = rules()->checkPositionSafe(!isMapped);
+    if (forced_pos) {
+        place(*forced_pos);
         placementDone = true;
         // Don't keep inside workarea if the window has specially configured position
         partial_keep_in_area = true;
@@ -1176,13 +1178,13 @@ void X11Window::updateVisibility()
         return;
     }
     setSkipTaskbar(originalSkipTaskbar()); // Reset from 'hidden'
-    if (isMinimized()) {
+    if (isMinimized() || workspace()->dpmsState() != Workspace::DpmsState::On) {
         info->setState(NET::Hidden, NET::Hidden);
         internalHide();
         return;
     }
     info->setState(NET::States(), NET::Hidden);
-    if (!isOnCurrentDesktop()) {
+    if (!isOnCurrentDesktop() || waylandServer()->isScreenLocked()) {
         internalKeep();
         return;
     }
@@ -1913,12 +1915,12 @@ void X11Window::sendSyncRequest()
 
 bool X11Window::wantsInput() const
 {
-    return rules()->checkAcceptFocus(acceptsFocus() || info->supportsProtocol(NET::TakeFocusProtocol));
+    return rules()->checkAcceptFocus(acceptsFocus() || info->supportsProtocol(NET::TakeFocusProtocol)) && isClient();
 }
 
 bool X11Window::acceptsFocus() const
 {
-    return info->input();
+    return info->input() && isClient();
 }
 
 void X11Window::doSetQuickTileMode()

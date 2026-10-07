@@ -26,6 +26,7 @@
 
 #include <KWayland/Client/pointer.h>
 #include <KWayland/Client/seat.h>
+#include <fcntl.h>
 #include <ranges>
 #include <xf86drmMode.h>
 
@@ -86,7 +87,6 @@ struct DrmPlaneState
     uint32_t crtcId;
     Rect destinationRect;
     uint32_t frambufferId;
-    std::array<uint32_t, 4> framebufferGemNames;
 
     static std::optional<DrmPlaneState> read(int fd, uint32_t id);
 };
@@ -102,36 +102,10 @@ std::optional<DrmPlaneState> DrmPlaneState::read(int fd, uint32_t id)
     if (!crtcId || !crtcX || !crtcY || !crtcW || !crtcH || !fbId) {
         return std::nullopt;
     }
-    std::array<uint32_t, 4> framebufferGemNames = {0};
-    if (auto ptr = drmModeGetFB2(fd, fbId->second)) {
-        std::unordered_set<uint32_t> handles;
-        const auto guard = qScopeGuard([&]() {
-            // NOTE that drmModeGetFB2 always creates new handles
-            for (uint32_t handle : handles) {
-                drmCloseBufferHandle(fd, handle);
-            }
-            drmModeFreeFB2(ptr);
-        });
-        for (int i = 0; i < 4; i++) {
-            if (ptr->handles[i] == 0) {
-                break;
-            }
-            handles.insert(ptr->handles[i]);
-            drm_gem_flink flink{
-                .handle = ptr->handles[i],
-                .name = 0,
-            };
-            if (drmIoctl(fd, DRM_IOCTL_GEM_FLINK, &flink) != 0) {
-                return std::nullopt;
-            }
-            framebufferGemNames[i] = flink.name;
-        }
-    }
     return DrmPlaneState{
         .crtcId = uint32_t(crtcId->second),
         .destinationRect = Rect(crtcX->second, crtcY->second, crtcW->second, crtcH->second),
         .frambufferId = uint32_t(fbId->second),
-        .framebufferGemNames = framebufferGemNames,
     };
 }
 
@@ -313,26 +287,6 @@ void DrmTest::init()
                                          | Test::AdditionalWaylandInterface::CursorShapeV1
                                          | Test::AdditionalWaylandInterface::LinuxDmabuf
                                          | Test::AdditionalWaylandInterface::Viewporter));
-}
-
-void DrmTest::initTestCase()
-{
-    if (!Test::primaryNodeAvailable()) {
-        QSKIP("no primary node available");
-        return;
-    }
-
-#ifdef FORCE_DRM_LEGACY
-    qputenv("KWIN_DRM_NO_AMS", "1");
-#endif
-#ifdef FORCE_NO_DRM_MODIFIERS
-    qputenv("KWIN_DRM_USE_MODIFIERS", "0");
-#endif
-    // make sure overlays are allowed
-    qputenv("KWIN_USE_OVERLAYS", "1");
-
-    QVERIFY(waylandServer()->init(s_socketName));
-    kwinApp()->start();
 
     const auto allOutputs = kwinApp()->outputBackend()->outputs();
     QVERIFY(!allOutputs.isEmpty());
@@ -355,6 +309,76 @@ void DrmTest::initTestCase()
         QVERIFY(state.has_value());
         QVERIFY(!state->crtc.has_value());
     }
+}
+
+static QByteArray getDriverName(int fd)
+{
+    auto version = drmGetVersion(fd);
+    if (version) {
+        auto ret = QByteArray(version->name, version->name_len);
+        drmFreeVersion(version);
+        return ret;
+    } else {
+        return QByteArray();
+    }
+}
+
+QByteArray listKmsNodes()
+{
+    QByteArray drmNodes;
+    const int deviceCount = drmGetDevices2(0, nullptr, 0);
+    if (deviceCount <= 0) {
+        return {};
+    }
+
+    QList<drmDevice *> devices(deviceCount);
+    if (drmGetDevices2(0, devices.data(), devices.size()) <= 0) {
+        return {};
+    }
+    auto deviceCleanup = qScopeGuard([&devices]() {
+        drmFreeDevices(devices.data(), devices.size());
+    });
+
+    for (drmDevice *device : devices) {
+        const FileDescriptor dev{::open(device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC)};
+        if (dev.isValid()) {
+            const auto driverName = getDriverName(dev.get());
+            if (driverName == "virtio_gpu" || driverName == "qxl" || driverName == "vmwgfx" || driverName == "vboxvideo") {
+                qWarning("Skipping broken VM driver %s!", driverName.data());
+                continue;
+            }
+            if (!drmNodes.isEmpty()) {
+                drmNodes += ":";
+            }
+            QByteArray node(device->nodes[DRM_NODE_PRIMARY]);
+            node.replace(":", "\\:");
+            drmNodes += node;
+        }
+    }
+    return drmNodes;
+}
+
+void DrmTest::initTestCase()
+{
+    if (!qEnvironmentVariableIsSet("KWIN_DRM_DEVICES")) {
+        const auto nodes = listKmsNodes();
+        if (nodes.isEmpty()) {
+            QSKIP("No suitable KMS devices found!");
+        }
+        qputenv("KWIN_DRM_DEVICES", nodes);
+    }
+
+#ifdef FORCE_DRM_LEGACY
+    qputenv("KWIN_DRM_NO_AMS", "1");
+#endif
+#ifdef FORCE_NO_DRM_MODIFIERS
+    qputenv("KWIN_DRM_USE_MODIFIERS", "0");
+#endif
+    // make sure overlays are allowed
+    qputenv("KWIN_USE_OVERLAYS", "1");
+
+    QVERIFY(waylandServer()->init(qAppName()));
+    kwinApp()->start();
 }
 
 void DrmTest::cleanup()
@@ -445,38 +469,25 @@ void DrmTest::testCursorLayer()
 #endif
 }
 
-static std::array<uint32_t, 4> gemNames(int fd, const DmaBufAttributes *attributes)
-{
-    std::array<uint32_t, 4> ret = {0, 0, 0, 0};
-    for (int i = 0; i < attributes->planeCount; i++) {
-        uint32_t handle = 0;
-        if (drmPrimeFDToHandle(fd, attributes->fd[i].get(), &handle) != 0) {
-            return {0};
-        }
-        drm_gem_flink flink{
-            .handle = handle,
-            .name = 0,
-        };
-        if (drmIoctl(fd, DRM_IOCTL_GEM_FLINK, &flink) != 0) {
-            return {0};
-        }
-        ret[i] = flink.name;
-        drmCloseBufferHandle(fd, handle);
-    }
-    return ret;
-}
-
-bool findBufferOnPlane(BackendOutput *output, GraphicsBuffer *buffer)
+static std::optional<DrmPlaneState> findBufferOnPlane(BackendOutput *output, GraphicsBuffer *kwinBuffer)
 {
     const auto state = DrmOutputState::read(output);
     if (!state || !state->crtc.has_value()) {
-        return false;
+        return std::nullopt;
     }
-    const int gpuFd = static_cast<DrmOutput *>(output)->connector()->gpu()->fd();
-    const auto framebufferGemNames = gemNames(gpuFd, buffer->dmabufAttributes());
-    return std::ranges::any_of(state->planes | std::views::values, [&framebufferGemNames](const DrmPlaneState &state) {
-        return state.framebufferGemNames == framebufferGemNames;
+    const auto gpu = static_cast<DrmOutput *>(output)->connector()->gpu();
+    const auto imported = gpu->importBuffer(kwinBuffer, FileDescriptor{});
+    if (!imported) {
+        return std::nullopt;
+    }
+    const auto values = state->planes | std::views::values;
+    const auto it = std::ranges::find_if(values, [&imported](const DrmPlaneState &state) {
+        return state.frambufferId == imported->framebufferId();
     });
+    if (it == values.end()) {
+        return std::nullopt;
+    }
+    return *it;
 }
 
 void DrmTest::testDirectScanout_data()
@@ -491,9 +502,12 @@ void DrmTest::testDirectScanout_data()
     QTest::addRow("no effective scaling") << 2.0 << QSize(output->pixelSize()) << Rect(QPoint(), output->pixelSize());
 #ifndef FORCE_DRM_LEGACY
     // TODO maybe also test that direct scanout does *not* happen with these cases and legacy modesetting?
-    QTest::addRow("scaled up by 2x") << 2.0 << QSize(output->pixelSize() / 2) << Rect(QPoint(), output->pixelSize() / 2);
-    QTest::addRow("scaled up by 2x + partial source") << 2.0 << output->pixelSize() << Rect(QPoint(output->pixelSize().width() / 4, output->pixelSize().height() / 2), output->pixelSize() / 2);
-    QTest::addRow("scaled down by 2x") << 2.0 << QSize(output->pixelSize() * 2) << Rect(QPoint(), output->pixelSize() * 2);
+    // VKMS doesn't support plane scaling yet
+    if (getDriverName(static_cast<DrmOutput *>(output)->connector()->gpu()->drmDevice()->fileDescriptor()) != "vkms") {
+        QTest::addRow("scaled up by 2x") << 2.0 << QSize(output->pixelSize() / 2) << Rect(QPoint(), output->pixelSize() / 2);
+        QTest::addRow("scaled up by 2x + partial source") << 2.0 << output->pixelSize() << Rect(QPoint(output->pixelSize().width() / 4, output->pixelSize().height() / 2), output->pixelSize() / 2);
+        QTest::addRow("scaled down by 2x") << 2.0 << QSize(output->pixelSize() * 2) << Rect(QPoint(), output->pixelSize() * 2);
+    }
 #endif
 }
 
@@ -545,7 +559,7 @@ void DrmTest::testDirectScanout()
         window.m_surface->damageBuffer(QRect(QPoint(), QSize(100, 100)));
         QVERIFY(window.presentWait());
 
-        if (findBufferOnPlane(output, window.m_buffer.buffer())) {
+        if (findBufferOnPlane(output, window.m_window->surfaceItem()->buffer())) {
             break;
         }
     }
@@ -577,10 +591,10 @@ void DrmTest::testOverlay_data()
     QTest::addColumn<Rect>("windowGeometry");
     QTest::addColumn<Rect>("planeGeometry");
 
-    QTest::addRow("overlay") << false << 1.0 << Rect(51, 51, 100, 100) << Rect(0, 0, 100, 100);
-    QTest::addRow("underlay") << true << 1.0 << Rect(51, 51, 100, 100) << Rect(0, 0, 100, 100);
-    // this case verifies (among other things) that output position is properly rounded for the plane position
-    QTest::addRow("scaling + overlay") << false << 1.6 << Rect(52, 52, 63, 63) << Rect(1, 1, 101, 101);
+    QTest::addRow("overlay") << false << 1.0 << Rect(0, 0, 100, 100) << Rect(0, 0, 100, 100);
+    QTest::addRow("underlay") << true << 1.0 << Rect(0, 0, 100, 100) << Rect(0, 0, 100, 100);
+    // this case verifies that sizes are rounded correctly for the plane geometry
+    QTest::addRow("scaling + overlay") << false << 1.6 << Rect(52, 52, 63, 63) << Rect(83, 83, 101, 101);
     // TODO also add a test case for occluded == false + SSD with rounded corners?
 }
 
@@ -638,7 +652,7 @@ void DrmTest::testOverlay()
         window.m_surface->damageBuffer(QRect(QPoint(), planeGeometry.size()));
         QVERIFY(window.presentWait());
 
-        if (findBufferOnPlane(output, window.m_buffer.buffer())) {
+        if (findBufferOnPlane(output, window.m_window->surfaceItem()->buffer())) {
             break;
         }
     }
@@ -662,16 +676,11 @@ void DrmTest::testOverlay()
     });
     QVERIFY(sceneIt != enabledPlanes.end());
 
-    const int gpuFd = static_cast<DrmOutput *>(output)->connector()->gpu()->fd();
-    const auto framebufferGemNames = gemNames(gpuFd, window.m_buffer->dmabufAttributes());
-    const auto overlayIt = std::ranges::find_if(enabledPlanes, [&framebufferGemNames](const DrmPlaneState &state) {
-        return state.framebufferGemNames == framebufferGemNames;
-    });
-    QVERIFY(overlayIt != enabledPlanes.end());
-    const auto &overlayPlane = *overlayIt;
-    QCOMPARE(overlayPlane.destinationRect, planeGeometry);
+    const auto overlayState = findBufferOnPlane(output, window.m_window->surfaceItem()->buffer());
+    QVERIFY(overlayState);
+    QCOMPARE(overlayState->destinationRect, planeGeometry);
     // TODO uncomment this once vkms supports the zpos property
-    // QCOMPARE_GE(overlayPlane.zpos, (*sceneIt).zpos);
+    // QCOMPARE_GE(overlayState->zpos, (*sceneIt).zpos);
 }
 
 void DrmTest::testDpms()

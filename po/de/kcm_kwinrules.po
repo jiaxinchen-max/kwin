@@ -1,19 +1,19 @@
 # SPDX-FileCopyrightText: 2004 Thomas Diehl <thd@kde.org>
 # SPDX-FileCopyrightText: 2005 Stephan Johach <hunsum@gmx.de>
-# SPDX-FileCopyrightText: 2005, 2006, 2007, 2008, 2010 Thomas Reitelbach <tr@erdfunkstelle.de>
-# SPDX-FileCopyrightText: 2009, 2010, 2011, 2012, 2016, 2018, 2022, 2023 Frederik Schwarzer <schwarzer@kde.org>
-# SPDX-FileCopyrightText: 2011, 2012 Frank Steinmetzger <Warp_7@gmx.de>
-# SPDX-FileCopyrightText: 2011, 2012, 2013, 2014, 2015, 2017, 2018, 2019, 2020, 2021 Burkhard Lück <lueck@hube-lueck.de>
+# SPDX-FileCopyrightText: 2005-2008, 2010 Thomas Reitelbach <tr@erdfunkstelle.de>
+# SPDX-FileCopyrightText: 2009-2012, 2016, 2018, 2022-2023 Frederik Schwarzer <schwarzer@kde.org>
+# SPDX-FileCopyrightText: 2011-2012 Frank Steinmetzger <Warp_7@gmx.de>
+# SPDX-FileCopyrightText: 2011-2015, 2017-2021 Burkhard Lück <lueck@hube-lueck.de>
 # SPDX-FileCopyrightText: 2023 Jannick Kuhr <opensource@kuhr.org>
-# SPDX-FileCopyrightText: 2024, 2025 Flori G <Renner03@protonmail.com>
+# SPDX-FileCopyrightText: 2024-2025 Flori G <Renner03@protonmail.com>
 # SPDX-FileCopyrightText: 2025 Alois Spitzbart <spitz234@hotmail.com>
-# SPDX-FileCopyrightText: 2025, 2026 Philipp Kiemle <l10n.daphipz@fastmail.de>
+# SPDX-FileCopyrightText: 2025-2026 Philipp Kiemle <l10n.daphipz@fastmail.de>
 msgid ""
 msgstr ""
 "Project-Id-Version: kcm_kwinrules\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-01-23 02:42+0000\n"
-"PO-Revision-Date: 2026-01-01 21:38+0100\n"
+"PO-Revision-Date: 2026-04-30 15:36+0200\n"
 "Last-Translator: Philipp Kiemle <l10n.daphipz@fastmail.de>\n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
 "Language: de\n"
@@ -21,7 +21,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.08.3\n"
+"X-Generator: Lokalize 25.12.3\n"
 
 #: kcmrules.cpp:228
 #, kde-format
@@ -253,7 +253,7 @@ msgstr "Position"
 #: rulesmodel.cpp:549 rulesmodel.cpp:554 rulesmodel.cpp:559
 #, kde-format
 msgid "Size & Position"
-msgstr "Größe & Position"
+msgstr "Größe && Position"
 
 #: rulesmodel.cpp:453
 #, kde-format
@@ -371,7 +371,7 @@ msgstr "Fenster im Vordergrund halten"
 #: rulesmodel.cpp:594 rulesmodel.cpp:600
 #, kde-format
 msgid "Arrangement & Access"
-msgstr "Anordnung & Zugriff"
+msgstr "Anordnung && Zugriff"
 
 #: rulesmodel.cpp:577
 #, kde-format
@@ -434,7 +434,7 @@ msgstr "Ohne Titelleiste und Rahmen"
 #: rulesmodel.cpp:722 rulesmodel.cpp:727
 #, kde-format
 msgid "Appearance & Fixes"
-msgstr "Erscheinungsbild & Korrekturen"
+msgstr "Erscheinungsbild && Korrekturen"
 
 #: rulesmodel.cpp:611
 #, kde-format
@@ -481,10 +481,10 @@ msgstr ""
 "Benutzeraktion öffnen, den Fokus erlangen und im Vordergrund erscheinen, "
 "während Sie gerade mit einem anderen Fenster interagieren. Diese Eigenschaft "
 "kann verwendet werden, um das Verhindern unerwünschter Aktivierung für "
-"einzelne Fenster zu steuern.<nl/><nl/>Folgendes geschieht je nach "
-"Einstellung mit einem Fenster, das ohne Ihre direkte Interaktion geöffnet "
-"wurde:<nl/><list><item><emphasis strong='true'>Deaktiviert:</emphasis> Das "
-"Fenster wird in den Vordergrund geholt und erhält den Fokus.</"
+"einzelne Fenster und Anwendungen zu steuern.<nl/><nl/>Folgendes geschieht je "
+"nach Einstellung mit einem Fenster, das ohne Ihre direkte Interaktion "
+"geöffnet wurde:<nl/><list><item><emphasis strong='true'>Deaktiviert:</"
+"emphasis> Das Fenster wird in den Vordergrund geholt und erhält den Fokus.</"
 "item><item><emphasis strong='true'>Niedrig:</emphasis> Verhindern "
 "unerwünschter Aktivierung wird angewendet, aber in einer für KWin unklaren "
 "Situation wird das Fenster in den Vordergrund geholt und erhält den Fokus.</"
@@ -939,8 +939,8 @@ msgid ""
 "Click the <interface>Add Property...</interface> button below to add some "
 "window properties that will be affected by the rule"
 msgstr ""
-"Auf den Knopf <interface>Eigenschaft hinzufügen …</interface> unten klicken, "
-"um einige Fenstereigenschaften hinzuzufügen, die von der Regel beeinflusst "
+"Klicken Sie auf <interface>Eigenschaft hinzufügen …</interface> unten, um "
+"einige Fenstereigenschaften hinzuzufügen, die von der Regel beeinflusst "
 "werden sollen"
 
 #: ui/RulesEditor.qml:88

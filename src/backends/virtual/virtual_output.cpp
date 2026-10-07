@@ -99,6 +99,7 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
     next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+    next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
     next.currentMode = props->mode.value_or(m_state.currentMode).lock();
     if (!next.currentMode) {
         next.currentMode = next.modes.front();
@@ -121,7 +122,25 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
             newModes.push_back(std::make_shared<OutputMode>(custom.size, custom.refreshRate, custom.flags | OutputMode::Flag::Custom));
         }
         next.modes = newModes;
+
+        if (!next.currentMode) {
+            next.currentMode = next.modes.front();
+        } else if (!next.modes.contains(next.currentMode)) {
+            const auto it = std::ranges::find_if(next.modes, [&next](const auto &mode) {
+                return mode->size() == next.currentMode->size()
+                    && mode->refreshRate() == next.currentMode->refreshRate()
+                    && mode->flags() == next.currentMode->flags();
+            });
+            if (it != next.modes.end()) {
+                next.currentMode = *it;
+            } else {
+                next.modes.push_front(next.currentMode);
+                next.currentMode->setRemoved();
+            }
+        }
     }
+    next.dpmsMode = props->dpmsMode.value_or(next.dpmsMode);
+    next.uuid = props->uuid.value_or(next.uuid);
 
     setState(next);
     m_renderLoop->setRefreshRate(next.currentMode->refreshRate());

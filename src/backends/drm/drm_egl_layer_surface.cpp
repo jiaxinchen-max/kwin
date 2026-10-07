@@ -362,9 +362,7 @@ bool EglGbmLayerSurface::doesSurfaceFit(Surface *surface, const QSize &size, con
         return formats.contains(surface->importDumbSwapchain->format());
     }
     switch (surface->importMode) {
-    case MultiGpuImportMode::None:
-    case MultiGpuImportMode::Dmabuf:
-    case MultiGpuImportMode::LinearDmabuf: {
+    case MultiGpuImportMode::None: {
         const auto format = surface->gbmSwapchain->format();
         return formats.contains(format) && (surface->gbmSwapchain->modifier() == DRM_FORMAT_MOD_INVALID || formats[format].contains(surface->gbmSwapchain->modifier()));
     }
@@ -427,14 +425,6 @@ std::unique_ptr<EglGbmLayerSurface::Surface> EglGbmLayerSurface::createSurface(c
         // qCDebug(KWIN_DRM) << "chose egl import with format" << formatName(surface->gbmSwapchain->format()).name << "and modifier" << surface->gbmSwapchain->modifier();
         return surface;
     }
-    if (auto surface = doTestFormats(sortedFormats, MultiGpuImportMode::Dmabuf)) {
-        qCDebug(KWIN_DRM) << "chose dmabuf import with format" << formatName(surface->gbmSwapchain->format()).name << "and modifier" << surface->gbmSwapchain->modifier();
-        return surface;
-    }
-    if (auto surface = doTestFormats(sortedFormats, MultiGpuImportMode::LinearDmabuf)) {
-        qCDebug(KWIN_DRM) << "chose linear dmabuf import with format" << formatName(surface->gbmSwapchain->format()).name << "and modifier" << surface->gbmSwapchain->modifier();
-        return surface;
-    }
     if (auto surface = doTestFormats(sortedFormats, MultiGpuImportMode::DumbBuffer)) {
         qCDebug(KWIN_DRM) << "chose cpu import with format" << formatName(surface->gbmSwapchain->format()).name << "and modifier" << surface->gbmSwapchain->modifier();
         return surface;
@@ -458,12 +448,17 @@ std::unique_ptr<EglGbmLayerSurface::Surface> EglGbmLayerSurface::createSurface(c
     QList<uint64_t> renderModifiers;
     auto ret = std::make_unique<Surface>();
     const auto drmFormat = m_eglBackend->eglDisplayObject()->allSupportedDrmFormats()[format];
+    QList<uint64_t> eglImportModifiers;
     if (importMode == MultiGpuImportMode::Egl) {
         ret->importContext = m_eglBackend->contextForGpu(m_gpu);
         if (!ret->importContext || ret->importContext->isSoftwareRenderer()) {
             return nullptr;
         }
         const auto importDrmFormat = ret->importContext->displayObject()->allSupportedDrmFormats()[format];
+        eglImportModifiers = filterModifiers(modifiers, importDrmFormat.nonExternalOnlyModifiers);
+        if (eglImportModifiers.empty()) {
+            return nullptr;
+        }
         renderModifiers = filterModifiers(importDrmFormat.allModifiers,
                                           drmFormat.nonExternalOnlyModifiers);
         // transferring non-linear buffers with implicit modifiers between GPUs is likely to yield wrong results
@@ -491,7 +486,7 @@ std::unique_ptr<EglGbmLayerSurface::Surface> EglGbmLayerSurface::createSurface(c
     if (cpuCopy) {
         ret->importDumbSwapchain = std::make_unique<QPainterSwapchain>(m_gpu->drmDevice()->allocator(), size, format);
     } else if (importMode == MultiGpuImportMode::Egl) {
-        ret->importGbmSwapchain = createGbmSwapchain(m_gpu, ret->importContext.get(), size, format, modifiers, MultiGpuImportMode::None, BufferTarget::Normal);
+        ret->importGbmSwapchain = createGbmSwapchain(m_gpu, ret->importContext.get(), size, format, eglImportModifiers, MultiGpuImportMode::None, BufferTarget::Normal);
         if (!ret->importGbmSwapchain) {
             return nullptr;
         }
@@ -505,16 +500,10 @@ std::unique_ptr<EglGbmLayerSurface::Surface> EglGbmLayerSurface::createSurface(c
 std::shared_ptr<EglSwapchain> EglGbmLayerSurface::createGbmSwapchain(DrmGpu *gpu, EglContext *context, const QSize &size, uint32_t format, const QList<uint64_t> &modifiers, MultiGpuImportMode importMode, BufferTarget bufferTarget) const
 {
     const bool linearSupported = modifiers.contains(DRM_FORMAT_MOD_LINEAR);
-    const bool preferLinear = importMode == MultiGpuImportMode::DumbBuffer;
-    const bool forceLinear = importMode == MultiGpuImportMode::LinearDmabuf || (importMode != MultiGpuImportMode::None && importMode != MultiGpuImportMode::DumbBuffer && modifiers == implicitModifier);
-    if (forceLinear && !linearSupported) {
-        return nullptr;
-    }
-    if (linearSupported && (preferLinear || forceLinear)) {
+    const bool preferLinear = importMode == MultiGpuImportMode::DumbBuffer || bufferTarget == BufferTarget::Dumb;
+    if (linearSupported && preferLinear) {
         if (const auto swapchain = EglSwapchain::create(gpu->drmDevice()->allocator(), context, size, format, linearModifier)) {
             return swapchain;
-        } else if (forceLinear) {
-            return nullptr;
         }
     }
     return EglSwapchain::create(gpu->drmDevice()->allocator(), context, size, format, modifiers);

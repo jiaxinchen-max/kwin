@@ -1,28 +1,29 @@
-# SPDX-FileCopyrightText: 2002, 2003, 2004 Thomas Diehl <thd@kde.org>
-# SPDX-FileCopyrightText: 2005, 2006, 2007, 2008, 2009, 2010 Thomas Reitelbach <tr@erdfunkstelle.de>
-# SPDX-FileCopyrightText: 2005, 2006Stephan Johach <hunsum@gmx.de>
+# SPDX-FileCopyrightText: 2002-2004 Thomas Diehl <thd@kde.org>
+# SPDX-FileCopyrightText: 2005-2006 Stephan Johach <hunsum@gmx.de>
+# SPDX-FileCopyrightText: 2005-2010 Thomas Reitelbach <tr@erdfunkstelle.de>
 # SPDX-FileCopyrightText: 2010 Johannes Obermayr <johannesobermayr@gmx.de>
-# SPDX-FileCopyrightText: 2010, 2011, 2012, 2013, 2015, 2016, 2018, 2020, 2021, 2022, 2023 Frederik Schwarzer <schwarzer@kde.org>
-# SPDX-FileCopyrightText: 2010, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Burkhard Lück <lueck@hube-lueck.de>
-# SPDX-FileCopyrightText: 2012, 2024, 2025 Frank Steinmetzger <Warp_7@gmx.de>
+# SPDX-FileCopyrightText: 2010, 2012-2021 Burkhard Lück <lueck@hube-lueck.de>
+# SPDX-FileCopyrightText: 2010-2013, 2015-2016, 2018, 2020-2023 Frederik Schwarzer <schwarzer@kde.org>
+# SPDX-FileCopyrightText: 2012, 2024-2025 Frank Steinmetzger <Warp_7@gmx.de>
 # SPDX-FileCopyrightText: 2023 Jannick Kuhr <opensource@kuhr.org>
 # SPDX-FileCopyrightText: 2024 Flori G <Renner03@protonmail.com>
 # SPDX-FileCopyrightText: 2025 Alois Spitzbart <spitz234@hotmail.com>
-# SPDX-FileCopyrightText: 2025 Philipp Kiemle <l10n.daphipz@fastmail.de>
+# SPDX-FileCopyrightText: 2025-2026 Philipp Kiemle <l10n.daphipz@fastmail.de>
+# SPDX-FileCopyrightText: 2026 Alexander Becker <alex-at-kde-l10n-de@freenet.de>
 msgid ""
 msgstr ""
 "Project-Id-Version: kwin\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-02-24 02:42+0000\n"
-"PO-Revision-Date: 2025-12-23 18:41+0100\n"
-"Last-Translator: Philipp Kiemle <l10n.daphipz@fastmail.de>\n"
+"POT-Creation-Date: 2026-04-24 02:42+0000\n"
+"PO-Revision-Date: 2026-04-19 21:22+0200\n"
+"Last-Translator: Alexander Becker <alex-at-kde-l10n-de@freenet.de>\n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.08.3\n"
+"X-Generator: Lokalize 25.12.3\n"
 
 #, kde-format
 msgctxt "NAME OF TRANSLATORS"
@@ -34,29 +35,29 @@ msgctxt "EMAIL OF TRANSLATORS"
 msgid "Your emails"
 msgstr "kde-i18n-de@kde.org"
 
-#: backends/wayland/wayland_output.cpp:481
+#: backends/wayland/wayland_output.cpp:482
 #, kde-format
 msgid "Press right control to ungrab pointer"
 msgstr "Drücken sie die rechte Strg-Taste um den Zeiger freizugeben"
 
-#: backends/wayland/wayland_output.cpp:483
+#: backends/wayland/wayland_output.cpp:484
 #, kde-format
 msgid "Press right control key to grab pointer"
 msgstr "Drücken sie die rechte Strg-Taste um den Zeiger einzufangen"
 
-#: backends/wayland/wayland_output.cpp:487
+#: backends/wayland/wayland_output.cpp:488
 #, kde-format
 msgctxt ""
 "Title of nested KWin Wayland with Wayland socket identifier as argument"
 msgid "KDE Wayland Compositor %1"
 msgstr "KDE-Wayland-Compositor %1"
 
-#: backends/wayland/wayland_output.cpp:490
+#: backends/wayland/wayland_output.cpp:491
 #, kde-format
 msgid "- Output disabled"
 msgstr "- Ausgabe deaktiviert"
 
-#: backends/wayland/wayland_output.cpp:492
+#: backends/wayland/wayland_output.cpp:493
 #, kde-format
 msgid "- Output dimmed"
 msgstr "- Ausgabe abgedunkelt"
@@ -102,7 +103,7 @@ msgstr "ICC-Profil „%1“ kann nicht für Bildschirme genutzt werden"
 msgid ""
 "ICC profile \"%1\" has unsupported connection space, only XYZ is supported"
 msgstr ""
-"ICC-Profil „%1“ hat einen nichtunterstützten Verbindungsraum, nur XYZ wird "
+"ICC-Profil „%1“ hat einen nicht unterstützten Verbindungsraum, nur XYZ wird "
 "unterstützt"
 
 #: core/iccprofile.cpp:402
@@ -126,7 +127,7 @@ msgid ""
 "ICC profile \"%1\" is broken, parsing chromatic adaptation matrix failed"
 msgstr ""
 "ICC-Profil „%1“ ist beschädigt, das Auslesen der chromatischen "
-"Adaptionsmatrix ist fehlgeschlagen"
+"Adaptationsmatrix ist fehlgeschlagen"
 
 #: core/iccprofile.cpp:436
 #, kde-format
@@ -134,7 +135,7 @@ msgid ""
 "ICC profile \"%1\" is broken, inverting chromatic adaptation matrix failed"
 msgstr ""
 "ICC-Profil „%1“ ist beschädigt, das Invertieren der chromatischen "
-"Adaptionsmatrix ist fehlgeschlagen"
+"Adaptationsmatrix ist fehlgeschlagen"
 
 # ich weiß nicht, ob primaries sich auf Farben bezieht
 #: core/iccprofile.cpp:449
@@ -165,10 +166,9 @@ msgid "Color profile is missing TRC tags"
 msgstr "Dem Farbprofil fehlen TRC-Tags"
 
 #: core/iccprofile.cpp:534
-#, fuzzy, kde-format
-#| msgid "Failed to open ICC profile \"%1\""
+#, kde-format
 msgid "Couldn't invert tone curves of ICC profile \"%1\""
-msgstr "ICC-Profil „%1“ kann nicht geöffnet werden"
+msgstr "Invertierung von Tonwertkurven des ICC-Profils „%1“ ist fehlgeschlagen"
 
 #: debug_console.cpp:86
 #, kde-format
@@ -741,12 +741,12 @@ msgstr "Annäherung"
 #: debug_console.cpp:543
 #, kde-format
 msgid "In"
-msgstr ""
+msgstr "Ein"
 
 #: debug_console.cpp:543
 #, kde-format
 msgid "Out"
-msgstr ""
+msgstr "Aus"
 
 #: debug_console.cpp:544 debug_console.cpp:562 debug_console.cpp:582
 #: debug_console.cpp:632 debug_console.cpp:649
@@ -780,32 +780,29 @@ msgid "Pressure"
 msgstr "Druck"
 
 #: debug_console.cpp:577
-#, fuzzy, kde-format
-#| msgid "Tablet Tool"
+#, kde-format
 msgid "Tablet Tool Tip"
-msgstr "Tablet-Werkzeug"
+msgstr "Tablet-Werkzeug Spitze"
 
 #: debug_console.cpp:581
 #, kde-format
 msgid "Tip"
-msgstr "Tipp"
+msgstr "Spitze"
 
 #: debug_console.cpp:581
-#, fuzzy, kde-format
-#| msgid "Move Down"
+#, kde-format
 msgid "Down"
-msgstr "Nach unten"
+msgstr "Gesenkt"
 
 #: debug_console.cpp:581
 #, kde-format
 msgid "Up"
-msgstr ""
+msgstr "Angehoben"
 
 #: debug_console.cpp:588
-#, fuzzy, kde-format
-#| msgid "Position"
+#, kde-format
 msgid "Slider Position"
-msgstr "Position"
+msgstr "Position des Schiebereglers"
 
 #: debug_console.cpp:597
 #, kde-format
@@ -836,7 +833,7 @@ msgstr "Tablet-Pad-Knopf"
 #: debug_console.cpp:616 debug_console.cpp:634 debug_console.cpp:651
 #, kde-format
 msgid "Group"
-msgstr ""
+msgstr "Gruppe"
 
 #: debug_console.cpp:617 debug_console.cpp:635 debug_console.cpp:652
 #, kde-format
@@ -846,12 +843,12 @@ msgstr "Modus"
 #: debug_console.cpp:618
 #, kde-format
 msgid "Is Mode Switch"
-msgstr ""
+msgstr "Ist Wahlschalter"
 
 #: debug_console.cpp:629
 #, kde-format
 msgid "Tablet Pad Strip"
-msgstr ""
+msgstr "Tablet-Pad-Streifen"
 
 #: debug_console.cpp:631 debug_console.cpp:648 debug_console.cpp:665
 #, kde-format
@@ -1105,7 +1102,7 @@ msgstr "Laden"
 #: debug_console.ui:14
 #, kde-format
 msgid "Debug Console"
-msgstr "Debug-Konsole"
+msgstr "Konsole zur Fehlersuche"
 
 #. i18n: ectx: attribute (title), widget (QWidget, windows)
 #: debug_console.ui:30
@@ -1482,12 +1479,12 @@ msgstr "Einrichtungsoptionen deaktivieren"
 msgid "Indicate that KWin has recently crashed n times"
 msgstr "Anzeigen, dass KWin kürzlich n-mal abgestürzt ist"
 
-#: main_wayland.cpp:305
+#: main_wayland.cpp:303
 #, kde-format
 msgid "Start a rootless Xwayland server."
 msgstr "Einen Xwayland-Server ohne root-Berechtigungen starten."
 
-#: main_wayland.cpp:308
+#: main_wayland.cpp:306
 #, kde-format
 msgid ""
 "Name of the Wayland socket to listen on. If not set \"wayland-0\" is used."
@@ -1495,45 +1492,45 @@ msgstr ""
 "Name des Wayland-Sockets, auf dem Verbindungen erwartet werden. Ohne Angabe "
 "wird „wayland-0“ verwendet."
 
-#: main_wayland.cpp:312
+#: main_wayland.cpp:310
 #, kde-format
 msgid "The X11 Display to use in windowed mode on platform X11."
 msgstr ""
 "Das X11-Display, das im Fenstermodus unter der X11-Plattform verwendet wird."
 
-#: main_wayland.cpp:316
+#: main_wayland.cpp:314
 #, kde-format
 msgid "The Wayland Display to use in windowed mode on platform Wayland."
 msgstr ""
 "Das Wayland-Display, das im Fenstermodus unter der Wayland-Plattform "
 "verwendet wird."
 
-#: main_wayland.cpp:318
+#: main_wayland.cpp:316
 #, kde-format
 msgid "Render to a virtual framebuffer."
 msgstr "In virtuellen Framebuffer rendern."
 
-#: main_wayland.cpp:320
+#: main_wayland.cpp:318
 #, kde-format
 msgid "The width for windowed mode. Default width is 1024."
 msgstr "Die Breite im Fenstermodus. Die Voreinstellung beträgt 1024 Pixel."
 
-#: main_wayland.cpp:324
+#: main_wayland.cpp:322
 #, kde-format
 msgid "The height for windowed mode. Default height is 768."
 msgstr "Die Höhe im Fenstermodus. Die Voreinstellung beträgt 768 Pixel."
 
-#: main_wayland.cpp:329
+#: main_wayland.cpp:327
 #, kde-format
 msgid "Whether or not to make windowed mode fullscreen"
 msgstr "Ob der Fenstermodus im Vollbild laufen soll"
 
-#: main_wayland.cpp:333
+#: main_wayland.cpp:331
 #, kde-format
 msgid "The scale for windowed mode. Default value is 1."
 msgstr "Die Skalierung im Fenstermodus. Die Voreinstellung beträgt 1."
 
-#: main_wayland.cpp:338
+#: main_wayland.cpp:336
 #, kde-format
 msgid ""
 "The number of windows to open as outputs in windowed mode. Default value is 1"
@@ -1541,7 +1538,7 @@ msgstr ""
 "Die Anzahl der zu öffnenden Fenster im Fenstermodus. Die Voreinstellung "
 "beträgt 1 Fenster"
 
-#: main_wayland.cpp:343
+#: main_wayland.cpp:341
 #, kde-format
 msgid ""
 "Wayland socket to use for incoming connections. This can be combined with --"
@@ -1550,7 +1547,7 @@ msgstr ""
 "Wayland-Socket, der für eingehende Verbindungen verwendet werden soll. Dies "
 "kann mit --socket kombiniert werden, um den Socketnamen anzugeben"
 
-#: main_wayland.cpp:347
+#: main_wayland.cpp:345
 #, kde-format
 msgid ""
 "XWayland socket to use for Xwayland's incoming connections. This can be set "
@@ -1559,67 +1556,67 @@ msgstr ""
 "XWayland-Socket, der für eingehende Verbindungen verwendet werden soll. Kann "
 "mehrfach angegeben werden"
 
-#: main_wayland.cpp:351
+#: main_wayland.cpp:349
 #, kde-format
 msgid "Name of the xwayland display that has been pre-set up"
 msgstr "Name der vorkonfigurierten XWayland-Anzeige"
 
-#: main_wayland.cpp:355
+#: main_wayland.cpp:353
 #, kde-format
 msgid "Name of the xauthority file "
 msgstr "Name der xauthority-Datei "
 
-#: main_wayland.cpp:359
+#: main_wayland.cpp:357
 #, kde-format
 msgid "Exits this instance so it can be restarted by kwin_wayland_wrapper."
 msgstr ""
 "Beendet diese Instanz, damit sie von kwin_wayland_wrapper neu gestartet "
 "werden kann."
 
-#: main_wayland.cpp:361
+#: main_wayland.cpp:359
 #, kde-format
 msgid "Render through drm node."
 msgstr "In DRM-Knoten rendern."
 
-#: main_wayland.cpp:362
+#: main_wayland.cpp:360
 #, kde-format
 msgid ""
 "Extract locale information from locale1 rather than the user's configuration"
 msgstr ""
 "Regionaleinstellungen von locale1 statt der Benutzerkonfiguration verwenden"
 
-#: main_wayland.cpp:389
+#: main_wayland.cpp:387
 #, kde-format
 msgid "Input method that KWin starts."
 msgstr "Eingabemethode, die von KWin gestartet wird."
 
-#: main_wayland.cpp:395
+#: main_wayland.cpp:393
 #, kde-format
 msgid "Starts the session in locked mode."
 msgstr "Startet die Sitzung im gesperrten Modus."
 
-#: main_wayland.cpp:399
+#: main_wayland.cpp:397
 #, kde-format
 msgid "Starts the session without lock screen support."
 msgstr "Startet die Sitzung ohne Unterstützung für Bildschirmsperre."
 
-#: main_wayland.cpp:404
+#: main_wayland.cpp:402
 #, kde-format
 msgid "Starts the session without global shortcuts support."
 msgstr "Startet die Sitzung ohne Unterstützung für globale Kurzbefehle."
 
-#: main_wayland.cpp:409
+#: main_wayland.cpp:407
 #, kde-format
 msgid "Disable KActivities integration."
 msgstr "KActivities-Integration deaktivieren."
 
-#: main_wayland.cpp:414
+#: main_wayland.cpp:412
 #, kde-format
 msgid "Exit after the session application, which is started by KWin, closed."
 msgstr ""
 "Beenden, nachdem die von KWin gestartete Sitzungsanwendung geschlossen wurde."
 
-#: main_wayland.cpp:419
+#: main_wayland.cpp:417
 #, kde-format
 msgid "Applications to start once Wayland and Xwayland server are started"
 msgstr ""
@@ -1720,12 +1717,12 @@ msgstr "Nach Fenstergruppe"
 msgid "Fullscreen windows"
 msgstr "Vollbildfenster"
 
+# Eingabeaufnahme oder Einfangen der Eingabe?
 #: plugins/eis/eisinputcapturemanager.cpp:130
-#, fuzzy, kde-format
-#| msgid "Disable KActivities integration."
+#, kde-format
 msgctxt "@action shortcut"
 msgid "Disable Active Input Capture"
-msgstr "KActivities-Integration deaktivieren."
+msgstr "Aktive Eingabeerfassung deaktivieren"
 
 #. i18n: ectx: property (text), widget (QLabel, label_3)
 #. i18n: ectx: property (text), widget (QLabel, label)
@@ -1935,38 +1932,38 @@ msgstr "Die Meta-Taste ist nun inaktiv."
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "activate"
-msgstr "Aktivieren"
+msgstr "aktivieren"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:44
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "close"
-msgstr "Schließen"
+msgstr "schließen"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:47
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "min"
-msgstr "Min"
+msgstr "min"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:50
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "minimize"
-msgstr "Minimieren"
+msgstr "minimieren"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:53
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "max"
-msgstr "Max"
+msgstr "max"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:56
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:58
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "maximize"
-msgstr "Maximieren"
+msgstr "maximieren"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:59
 #, kde-format
@@ -1984,13 +1981,13 @@ msgstr "Fensterheber"
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "keep above"
-msgstr "Im Vordergrund halten"
+msgstr "im Vordergrund halten"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:68
 #, kde-format
 msgctxt "Note this is a KRunner keyword"
 msgid "keep below"
-msgstr "Im Hintergrund halten"
+msgstr "im Hintergrund halten"
 
 #: plugins/krunner-integration/windowsrunnerinterface.cpp:75
 #, kde-format
@@ -2207,7 +2204,7 @@ msgstr "Letzte Mausspur entfernen"
 msgid "Clear Mouse Marks"
 msgstr "Mausspuren entfernen"
 
-#: plugins/mousemark/mousemark_config.cpp:87
+#: plugins/mousemark/mousemark_config.cpp:88
 #, kde-format
 msgctxt "Suffix"
 msgid " pixel"
@@ -2290,10 +2287,9 @@ msgstr "Meta"
 
 #. i18n: ectx: property (text), widget (QLabel, label_ArrowdrawModifierKeys)
 #: plugins/mousemark/mousemark_config.ui:157
-#, fuzzy, kde-format
-#| msgid "Modifier keys:"
+#, kde-format
 msgid "Arrow draw modifier keys:"
-msgstr "Sondertasten:"
+msgstr "Sondertasten für Zeichnen mit Pfeiltasten:"
 
 #: plugins/nightlight/nightlightmanager.cpp:55
 #, kde-format
@@ -2462,10 +2458,9 @@ msgstr "Fehler beim Verbinden mit PipeWire-Kontext"
 #: plugins/screencast/screencastmanager.cpp:81
 #: plugins/screencast/screencastmanager.cpp:97
 #: plugins/screencast/screencastmanager.cpp:151
-#, fuzzy, kde-format
-#| msgid "Suspend Compositing"
+#, kde-format
 msgid "Unsupported compositing type"
-msgstr "Compositing aussetzen"
+msgstr "Nicht unterstützter Compositing-Typ"
 
 #: plugins/screencast/screencastmanager.cpp:62
 #, kde-format
@@ -3624,10 +3619,11 @@ msgstr "Tablet zur nächsten Ausgabe verschieben"
 msgid "Tablet moved to %1"
 msgstr "Tablet nach %1 verschoben"
 
+# gewechselt oder getauscht?
 #: tablet_input.cpp:199
 #, kde-format
 msgid "Tablets switched outputs"
-msgstr ""
+msgstr "Tablets haben die Ausgaben gewechselt"
 
 #: useractions.cpp:162
 #, kde-format
@@ -3637,8 +3633,7 @@ msgid ""
 "the mouse: use the window menu instead, activated using the %1 keyboard "
 "shortcut."
 msgstr ""
-"Sie haben festgelegt, dass ein Fenster ohne Umrandung angezeigt werden "
-"soll.\n"
+"Sie haben festgelegt, dass ein Fenster ohne Rahmen angezeigt werden soll.\n"
 "Der vorherige Zustand lässt sich nicht mit Hilfe der Maus wiederherstellen. "
 "Verwenden Sie stattdessen das Fenstermenü, das über den Tastenbefehl %1 "
 "aktiviert wird."
@@ -3690,7 +3685,7 @@ msgstr "Ohne &Titelleiste und Rahmen"
 #: useractions.cpp:251
 #, kde-format
 msgid "&Hide from Screencast"
-msgstr ""
+msgstr "Vor Bildschirmaufzeichnung &verbergen"
 
 #: useractions.cpp:259
 #, kde-format
@@ -4144,74 +4139,78 @@ msgstr "Fenster aktivieren (%1)"
 msgid "unknown"
 msgstr "unbekannt"
 
-#: virtualdesktops.cpp:731 virtualdesktops.cpp:810
+#: virtualdesktops.cpp:732 virtualdesktops.cpp:811
 #, kde-format
 msgid "Desktop %1"
 msgstr "Arbeitsfläche %1"
 
-#: virtualdesktops.cpp:817
+#: virtualdesktops.cpp:818
 #, kde-format
 msgid "Switch to Next Desktop"
 msgstr "Zur nächsten Arbeitsfläche umschalten"
 
-#: virtualdesktops.cpp:818
+#: virtualdesktops.cpp:819
 #, kde-format
 msgid "Switch to Previous Desktop"
 msgstr "Zur vorherigen Arbeitsfläche umschalten"
 
-#: virtualdesktops.cpp:821
+#: virtualdesktops.cpp:822
 #, kde-format
 msgid "Switch One Desktop to the Right"
 msgstr "Eine Arbeitsfläche nach rechts"
 
-#: virtualdesktops.cpp:822
+#: virtualdesktops.cpp:823
 #, kde-format
 msgid "Switch One Desktop to the Left"
 msgstr "Eine Arbeitsfläche nach links"
 
-#: virtualdesktops.cpp:823
+#: virtualdesktops.cpp:824
 #, kde-format
 msgid "Switch One Desktop Up"
 msgstr "Eine Arbeitsfläche nach oben"
 
-#: virtualdesktops.cpp:824
+#: virtualdesktops.cpp:825
 #, kde-format
 msgid "Switch One Desktop Down"
 msgstr "Eine Arbeitsfläche nach unten"
 
-#: virtualdesktops.cpp:912
+#: virtualdesktops.cpp:913
 #, kde-format
 msgid "Switch to Desktop %1"
 msgstr "Auf Arbeitsfläche %1 umschalten"
 
-#: wayland/outputmanagement_v2.cpp:602
+#: wayland/outputmanagement_v2.cpp:603
 #, kde-format
 msgid "One of the relevant outputs is no longer available"
 msgstr "Eines der relevanten Ausgabegeräte ist nicht mehr verfügbar"
 
-#: wayland/outputmanagement_v2.cpp:620
+#: wayland/outputmanagement_v2.cpp:621
 #, kde-format
 msgid "Disabling all outputs through configuration changes is not allowed"
 msgstr ""
 "Alle Ausgabegeräte über Änderung der Einrichtung zu deaktivieren ist nicht "
 "zulässig"
 
-#: wayland/outputmanagement_v2.cpp:637
+#: wayland/outputmanagement_v2.cpp:638
 #, kde-format
 msgid "Cannot add a custom mode with an empty size"
 msgstr ""
+"Ein benutzerdefinierter Modus mit leerer Größenangabe kann nicht hinzugefügt "
+"werden"
 
-#: wayland/outputmanagement_v2.cpp:641
+#: wayland/outputmanagement_v2.cpp:642
 #, kde-format
 msgid "Cannot add a custom mode with a refresh rate of zero Hz"
 msgstr ""
+"Ein benutzerdefinierter Modus mit einer Wiederholrate von 0 Hz kann nicht "
+"hinzugefügt werden"
 
-#: wayland/outputmanagement_v2.cpp:659
+#: wayland/outputmanagement_v2.cpp:660
 #, kde-format
 msgid "Position of output %s is way too large (%d, %d)"
-msgstr ""
+msgstr "Position der Ausgabe %s ist zu groß (%d, %d)"
 
-#: wayland/outputmanagement_v2.cpp:676
+#: wayland/outputmanagement_v2.cpp:677
 #, kde-format
 msgid "The driver rejected the output configuration"
 msgstr "Der Treiber hat die Ausgabeeinrichtung zurückgewiesen"
@@ -4222,7 +4221,7 @@ msgctxt "Application is not responding, appended to window title"
 msgid "(Not Responding)"
 msgstr "(Reagiert nicht)"
 
-#: workspace.cpp:1755
+#: workspace.cpp:1764
 #, kde-format
 msgctxt "Introductory text shown in the support information."
 msgid ""

@@ -57,6 +57,7 @@ namespace KWin
 {
 
 static const std::optional<bool> s_modifiersEnv = environmentVariableBoolValue("KWIN_DRM_USE_MODIFIERS");
+static const std::optional<bool> s_colorPipelineEnv = environmentVariableBoolValue("KWIN_DRM_USE_COLOR_PIPELINE");
 
 DrmGpu::DrmGpu(DrmBackend *backend, int fd, std::unique_ptr<DrmDevice> &&device)
     : m_fd(fd)
@@ -119,7 +120,7 @@ DrmGpu::DrmGpu(DrmBackend *backend, int fd, std::unique_ptr<DrmDevice> &&device)
         m_asyncPageflipSupported = drmGetCap(fd, DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP, &capability) == 0 && capability == 1;
     }
 
-    m_colorPipelineSupported = drmSetClientCap(fd, DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE, 1) == 0;
+    m_colorPipelineSupported = s_colorPipelineEnv.value_or(false) && drmSetClientCap(fd, DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE, 1) == 0;
 
     m_delayedModesetTimer.setInterval(0);
     m_delayedModesetTimer.setSingleShot(true);
@@ -508,7 +509,7 @@ DrmPipeline::Error DrmGpu::testPipelines()
             }
         }
     }
-    return DrmPipeline::commitPipelines(m_pipelines, DrmPipeline::CommitMode::TestAllowModeset, unusedModesetObjects());
+    return DrmPipeline::commitPipelines(m_pipelines, this, DrmPipeline::CommitMode::TestAllowModeset, unusedModesetObjects());
 }
 
 DrmOutput *DrmGpu::findOutput(quint32 connector)
@@ -609,6 +610,10 @@ void DrmGpu::removeOutput(DrmOutput *output)
     output->unref();
     // force a modeset to make sure unused objects are cleaned up
     m_forceModeset = true;
+    if (m_pipelines.isEmpty()) {
+        // with no pipelines left, no presentation will trigger the modeset
+        maybeModeset(nullptr, nullptr);
+    }
 }
 
 DrmBackend *DrmGpu::platform() const
@@ -837,11 +842,17 @@ void DrmGpu::doModeset()
     }
     if (pipelines.empty()) {
         m_pendingModesetFrames.clear();
+        if (m_forceModeset) {
+            // when the last output is removed, there's no pipeline commit left
+            // to disable the now unused objects with. Disable them explicitly,
+            // otherwise the kernel keeps scanning out to a disconnected connector
+            DrmPipeline::commitPipelines(pipelines, this, DrmPipeline::CommitMode::CommitModeset, unusedModesetObjects());
+        }
         m_forceModeset = false;
         return;
     }
     m_inModeset = true;
-    const DrmPipeline::Error err = DrmPipeline::commitPipelines(pipelines, DrmPipeline::CommitMode::CommitModeset, unusedModesetObjects());
+    const DrmPipeline::Error err = DrmPipeline::commitPipelines(pipelines, this, DrmPipeline::CommitMode::CommitModeset, unusedModesetObjects());
     for (DrmPipeline *pipeline : std::as_const(pipelines)) {
         if (pipeline->modesetPresentPending()) {
             pipeline->resetModesetPresentPending();
@@ -854,7 +865,9 @@ void DrmGpu::doModeset()
         }
     } else {
         if (err != DrmPipeline::Error::FramePending) {
-            QTimer::singleShot(0, m_platform, &DrmBackend::updateOutputs);
+            QTimer::singleShot(0, m_platform, [backend = m_platform]() {
+                backend->updateOutputs();
+            });
         }
     }
     m_pendingModesetFrames.clear();
@@ -1025,7 +1038,7 @@ std::shared_ptr<DrmFramebuffer> DrmGpu::importBuffer(GraphicsBuffer *buffer, Fil
                             attributes->offset.data(),
                             &framebufferId,
                             0);
-        if (ret == EOPNOTSUPP && attributes->planeCount == 1) {
+        if (ret == -EOPNOTSUPP && attributes->planeCount == 1) {
             ret = drmModeAddFB(m_fd,
                                attributes->width,
                                attributes->height,

@@ -84,13 +84,16 @@ void HighlightWindowEffect::prepareHighlighting()
 {
     const QList<EffectWindow *> windows = effects->stackingOrder();
     for (EffectWindow *window : windows) {
-        if (!isHighlightWindow(window)) {
+        if (window->isDeleted() || !isHighlightWindow(window)) {
             continue;
         }
+
         if (isHighlighted(window)) {
             startHighlightAnimation(window);
-        } else {
+        } else if (window->isVisible()) {
             startGhostAnimation(window);
+        } else {
+            startRevertAnimation(window);
         }
     }
 }
@@ -99,9 +102,11 @@ void HighlightWindowEffect::finishHighlighting()
 {
     const QList<EffectWindow *> windows = effects->stackingOrder();
     for (EffectWindow *window : windows) {
-        if (isHighlightWindow(window)) {
-            startRevertAnimation(window);
+        if (window->isDeleted() || !isHighlightWindow(window)) {
+            continue;
         }
+
+        startRevertAnimation(window);
     }
 
     // Sanity check, ideally, this should never happen.

@@ -30,7 +30,7 @@ namespace KWin
 
 EglContext *EglContext::s_currentContext = nullptr;
 
-std::unique_ptr<EglContext> EglContext::create(EglDisplay *display, EGLConfig config, ::EGLContext sharedContext)
+std::shared_ptr<EglContext> EglContext::create(EglDisplay *display, EGLConfig config, ::EGLContext sharedContext)
 {
     auto handle = createContext(display, config, sharedContext);
     if (!handle) {
@@ -40,7 +40,7 @@ std::unique_ptr<EglContext> EglContext::create(EglDisplay *display, EGLConfig co
         eglDestroyContext(display->handle(), handle);
         return nullptr;
     }
-    auto ret = std::make_unique<EglContext>(display, config, handle);
+    auto ret = std::make_shared<EglContext>(display, config, handle);
     s_currentContext = ret.get();
     if (!ret->checkSupported()) {
         return nullptr;
@@ -176,6 +176,8 @@ bool EglContext::makeCurrent(EGLSurface surface)
     }
     const bool ret = eglMakeCurrent(m_display->handle(), surface, surface, m_handle) == EGL_TRUE;
     if (ret) {
+        Q_ASSERT(m_handle != EGL_NO_CONTEXT);
+        Q_ASSERT(eglGetCurrentContext() == m_handle);
         s_currentContext = this;
     } else {
         // QOpenGLContext::doneCurrent unset the context, we need to mirror that here!

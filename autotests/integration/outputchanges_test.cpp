@@ -150,6 +150,7 @@ private Q_SLOTS:
     void testMirroring();
 
     void testAutoBrightness();
+    void testTemporaryDpmsHotplug();
 };
 
 void OutputChangesTest::initTestCase()
@@ -1882,8 +1883,9 @@ void OutputChangesTest::testSettingRestoration()
 
     QFETCH(QList<IdentificationData>, outputData);
 
-    Test::setOutputConfig(outputData | std::views::transform([](const IdentificationData &data) {
-        return Test::OutputInfo{
+    const auto outputBackend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    outputBackend->setVirtualOutputs(outputData | std::views::transform([](const IdentificationData &data) {
+        return VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -1895,19 +1897,18 @@ void OutputChangesTest::testSettingRestoration()
         };
     }) | std::ranges::to<QList>());
 
-    // delete the previous config to avoid loading the config from workspace
-    QFile(QStandardPaths::locate(QStandardPaths::ConfigLocation, QStringLiteral("kwinoutputconfig.json"))).remove();
+    OutputConfigurationStore *configurationStore = workspace()->outputConfigureStore();
+    configurationStore->clear();
 
     auto outputs = kwinApp()->outputBackend()->outputs();
-    OutputConfigurationStore configs;
 
     QList<std::optional<QPoint>> outputPositions;
     {
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
-        const auto [config, type] = *cfg;
+        auto [config, type] = *cfg;
+        workspace()->applyOutputConfiguration(config);
         for (const auto output : outputs) {
-            output->applyChanges(config);
             outputPositions.push_back(config.constChangeSet(output)->pos);
         }
     }
@@ -1915,7 +1916,7 @@ void OutputChangesTest::testSettingRestoration()
     // the positions must be independent of the order of outputs in the list
     std::ranges::reverse(outputs);
     {
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
         const auto [config, type] = *cfg;
         auto revertedPositions = outputPositions | std::views::reverse;
@@ -1925,9 +1926,9 @@ void OutputChangesTest::testSettingRestoration()
     }
 
     // this must work if one of the outputs is removed in between as well
-    Test::setOutputConfig({
-        Test::OutputInfo{
-            .geometry = Rect(1280, 0, 1280, 1024),
+    outputBackend->setVirtualOutputs({
+        VirtualBackend::OutputInfo{
+            .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
             .modes = {ModeInfo(QSize(1280, 1024), 60000, OutputMode::Flag::Preferred)},
@@ -1937,16 +1938,10 @@ void OutputChangesTest::testSettingRestoration()
             .mstPath = outputData.back().mstPath,
         },
     });
-    outputs = kwinApp()->outputBackend()->outputs();
-    {
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
-        const auto [config, type] = *cfg;
-        outputs.front()->applyChanges(config);
-    }
 
     // and add it again, with the inverted order
-    Test::setOutputConfig(outputData | std::views::reverse | std::views::transform([](const IdentificationData &data) {
-        return Test::OutputInfo{
+    outputBackend->setVirtualOutputs(outputData | std::views::reverse | std::views::transform([](const IdentificationData &data) {
+        return VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -1960,7 +1955,7 @@ void OutputChangesTest::testSettingRestoration()
     outputs = kwinApp()->outputBackend()->outputs();
 
     {
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
         const auto [config, type] = *cfg;
         auto revertedPositions = outputPositions | std::views::reverse;
@@ -1975,6 +1970,8 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
     // this test checks that when libdisplay-info fails to parse an EDID
     // and gets fixed later, we still pick the same settings as before
 
+    const auto outputBackend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+
     QFile file(QFINDTESTDATA("data/same serial number/edid.bin"));
     file.open(QIODeviceBase::OpenModeFlag::ReadOnly);
     const auto edid = file.readAll();
@@ -1982,8 +1979,8 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
     // first, libdisplay-info failed to parse the EDID and we don't have an EDID ID
     // note that this uses two displays with the same EDID,
     // to additionally test the case when EDID ID isn't unique when this happens
-    Test::setOutputConfig({
-        Test::OutputInfo{
+    outputBackend->setVirtualOutputs({
+        VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -1996,7 +1993,7 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
             .connectorName = std::nullopt,
             .mstPath = QByteArrayLiteral("MST-1-1"),
         },
-        Test::OutputInfo{
+        VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -2011,18 +2008,17 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
         },
     });
 
-    // delete the previous config to avoid loading the config from workspace
-    QFile(QStandardPaths::locate(QStandardPaths::ConfigLocation, QStringLiteral("kwinoutputconfig.json"))).remove();
+    OutputConfigurationStore *configurationStore = workspace()->outputConfigureStore();
+    configurationStore->clear();
 
     auto outputs = kwinApp()->outputBackend()->outputs();
-    OutputConfigurationStore configs;
 
     {
         // query the generated config, like KWin normally would
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
-        const auto [config, type] = *cfg;
-        outputs.front()->applyChanges(config);
+        auto [config, type] = *cfg;
+        workspace()->applyOutputConfiguration(config);
         QCOMPARE(config.constChangeSet(outputs[0])->desiredModeSize.value(), QSize(1280, 1024));
     }
     {
@@ -2032,23 +2028,23 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
         changeSet->mode = outputs[0]->modes()[1];
         changeSet->desiredModeSize = QSize(640, 480);
         changeSet->desiredModeRefreshRate = 60000;
-        outputs.front()->applyChanges(config);
-        configs.storeConfig(outputs, false, config);
+        changeSet->desiredModeFlags = 0;
+        workspace()->applyOutputConfiguration(config);
     }
     {
         // verify that querying the config also shows the changed mode
         // things could already go wrong here
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
-        const auto [config, type] = *cfg;
+        auto [config, type] = *cfg;
         QCOMPARE(type, OutputConfigurationStore::ConfigType::Preexisting);
-        outputs.front()->applyChanges(config);
+        workspace()->applyOutputConfiguration(config);
         QCOMPARE(config.constChangeSet(outputs[0])->desiredModeSize.value(), QSize(640, 480));
     }
 
     // now libdisplay-info was updated, and we have an EDID ID for the same hash
-    Test::setOutputConfig({
-        Test::OutputInfo{
+    outputBackend->setVirtualOutputs({
+        VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -2061,7 +2057,7 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
             .connectorName = std::nullopt,
             .mstPath = QByteArrayLiteral("MST-1-1"),
         },
-        Test::OutputInfo{
+        VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -2078,7 +2074,7 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
     outputs = kwinApp()->outputBackend()->outputs();
 
     {
-        auto cfg = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
         QVERIFY(cfg.has_value());
         const auto [config, type] = *cfg;
         QCOMPARE(config.constChangeSet(outputs[0])->desiredModeSize.value(), QSize(640, 480));
@@ -2087,8 +2083,9 @@ void OutputChangesTest::testSettingRestoration_initialParsingFailure()
 
 void OutputChangesTest::testSettingRestoration_replacedMode()
 {
-    Test::setOutputConfig({
-        Test::OutputInfo{
+    const auto outputBackend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    outputBackend->setVirtualOutputs({
+        VirtualBackend::OutputInfo{
             .geometry = Rect(0, 0, 1280, 1024),
             .internal = false,
             .physicalSizeInMM = QSize(598, 336),
@@ -2104,12 +2101,11 @@ void OutputChangesTest::testSettingRestoration_replacedMode()
         },
     });
 
-    // delete the previous config to avoid loading the config from workspace
-    QFile(QStandardPaths::locate(QStandardPaths::ConfigLocation, QStringLiteral("kwinoutputconfig.json"))).remove();
+    OutputConfigurationStore *configurationStore = workspace()->outputConfigureStore();
+    configurationStore->clear();
 
     const auto outputs = kwinApp()->outputBackend()->outputs();
     const auto output = outputs.front();
-    OutputConfigurationStore configs;
 
     {
         // first, select the second mode
@@ -2118,17 +2114,17 @@ void OutputChangesTest::testSettingRestoration_replacedMode()
         changeSet->mode = output->modes()[1];
         changeSet->desiredModeSize = QSize(1280, 1024);
         changeSet->desiredModeRefreshRate = 60000;
-        output->applyChanges(config);
-        configs.storeConfig(outputs, false, config);
+        changeSet->desiredModeFlags = 0;
+        workspace()->applyOutputConfiguration(config);
     }
 
     // now, mark the mode as "removed". Its replacement is already in the mode list
     outputs[0]->modes()[1]->setRemoved();
 
-    const auto opt = configs.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    const auto opt = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
     QVERIFY(opt.has_value());
-    const auto [config, type] = *opt;
-    output->applyChanges(config);
+    auto [config, type] = *opt;
+    workspace()->applyOutputConfiguration(config);
 
     // the preferred mode size and refresh rate should be the same,
     // and the third mode should be selected
@@ -2403,6 +2399,40 @@ void OutputChangesTest::testAutoBrightness()
     curve.adjust(0.4, 100);
     COMPARE_RANGE(curve.sample(100), 0.4, eta);
     COMPARE_RANGE(curve.sample(101), 0.4, laxEta);
+}
+
+void OutputChangesTest::testTemporaryDpmsHotplug()
+{
+    workspace()->outputConfigureStore()->clear();
+
+    Test::setOutputConfig({
+        Test::OutputInfo{
+            .geometry = Rect(0, 0, 1280, 1200),
+            .connectorName = QStringLiteral("TEST"),
+        },
+    });
+
+    // turn off the outputs
+    workspace()->requestDpmsState(Workspace::DpmsState::Off);
+    QCOMPARE(workspace()->dpmsState(), Workspace::DpmsState::AboutToTurnOff);
+    QSignalSpy dpmsChanged(workspace(), &Workspace::dpmsStateChanged);
+    QVERIFY(dpmsChanged.wait());
+    QCOMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
+
+    // remove the output
+    Test::setOutputConfig(QList<Test::OutputInfo>{});
+
+    // displays should still be off
+    QCOMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
+
+    // re-adding the output immediately should keep it off
+    Test::setOutputConfig({
+        Test::OutputInfo{
+            .geometry = Rect(0, 0, 1280, 1200),
+            .connectorName = QStringLiteral("TEST"),
+        },
+    });
+    QCOMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
 }
 
 } // namespace KWin

@@ -309,6 +309,11 @@ uint32_t BackendOutput::desiredModeRefreshRate() const
     return m_state.desiredModeRefreshRate;
 }
 
+std::optional<uint32_t> BackendOutput::desiredModeFlags() const
+{
+    return m_state.desiredModeFlags;
+}
+
 BackendOutput::SubPixel BackendOutput::subPixel() const
 {
     return m_information.subPixel;
@@ -337,6 +342,7 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.vrrPolicy = props->vrrPolicy.value_or(m_state.vrrPolicy);
     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+    next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
     next.uuid = props->uuid.value_or(m_state.uuid);
     next.replicationSource = props->replicationSource.value_or(m_state.replicationSource);
     next.priority = props->priority.value_or(m_state.priority);
@@ -758,6 +764,7 @@ QPoint BackendOutput::deviceOffset() const
 // TODO move these quirks to libdisplay-info?
 static const std::array s_brokenDdcCi = {
     std::make_pair(QByteArrayLiteral("SAM"), QByteArrayLiteral("Odyssey G5")),
+    std::make_pair(QByteArrayLiteral("SAM"), QByteArrayLiteral("LS24D60xU")),
 };
 
 bool BackendOutput::isDdcCiKnownBroken() const

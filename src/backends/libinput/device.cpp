@@ -11,6 +11,7 @@
 #include "config-kwin.h"
 
 #include "core/output.h"
+#include "core/outputbackend.h"
 #include "libinput_logging.h"
 #include "main.h"
 #include "mousebuttons.h"
@@ -902,9 +903,9 @@ void Device::setOutputName(const QString &name)
         return;
     }
     m_outputName = name;
-    const auto outputs = workspace()->outputs();
-    const auto it = std::ranges::find_if(outputs, [&name](LogicalOutput *output) {
-        return output->name() == name;
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    const auto it = std::ranges::find_if(outputs, [&name](BackendOutput *output) {
+        return output->name() == name && workspace()->findOutput(output) != nullptr;
     });
     if (it == outputs.end()) {
         setOutput(nullptr);
@@ -938,9 +939,9 @@ void Device::setOutputUuid(const QString &uuid)
         return;
     }
     m_outputUuid = uuid;
-    const auto outputs = workspace()->outputs();
-    const auto it = std::ranges::find_if(outputs, [&uuid](LogicalOutput *output) {
-        return output->uuid() == uuid;
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    const auto it = std::ranges::find_if(outputs, [&uuid](BackendOutput *output) {
+        return output->uuid() == uuid && workspace()->findOutput(output) != nullptr;
     });
     if (it == outputs.end()) {
         setOutput(nullptr);
@@ -955,12 +956,12 @@ void Device::setOutputUuid(const QString &uuid)
 #endif
 }
 
-LogicalOutput *Device::output() const
+BackendOutput *Device::output() const
 {
     return m_output;
 }
 
-void Device::setOutput(LogicalOutput *output)
+void Device::setOutput(BackendOutput *output)
 {
     m_output = output;
 }
@@ -1119,12 +1120,16 @@ QRectF Device::defaultInputArea() const
 QString Device::serializeMatrix(const QMatrix4x4 &matrix)
 {
     QString result;
-    for (int i = 0; i < 16; i++) {
-        result.append(QString::number(matrix.constData()[i]));
-        if (i != 15) {
-            result.append(QLatin1Char(','));
+
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            if (!result.isEmpty()) {
+                result.append(QLatin1Char(','));
+            }
+            result.append(QString::number(matrix(i, j)));
         }
     }
+
     return result;
 }
 

@@ -154,7 +154,7 @@ void Options::setXwaylandEavesdropsMouse(bool eavesdropsMouse)
         return;
     }
     m_xwaylandEavesdropsMouse = eavesdropsMouse;
-    Q_EMIT xwaylandEavesdropsChanged();
+    Q_EMIT xwaylandEavesdropsMouseChanged();
 }
 
 void Options::setXWaylandEisNoPrompt(bool doNotPrompt)
@@ -871,15 +871,15 @@ Options::MouseCommand Options::wheelToMouseCommand(MouseWheelCommand com, qreal 
 {
     switch (com) {
     case MouseWheelRaiseLower:
-        return delta > 0 ? MouseRaise : MouseLower;
+        return delta < 0 ? MouseRaise : MouseLower;
     case MouseWheelMaximizeRestore:
-        return delta > 0 ? MouseMaximize : MouseRestore;
+        return delta < 0 ? MouseMaximize : MouseRestore;
     case MouseWheelAboveBelow:
-        return delta > 0 ? MouseAbove : MouseBelow;
+        return delta < 0 ? MouseAbove : MouseBelow;
     case MouseWheelPreviousNextDesktop:
-        return delta > 0 ? MousePreviousDesktop : MouseNextDesktop;
+        return delta < 0 ? MousePreviousDesktop : MouseNextDesktop;
     case MouseWheelChangeOpacity:
-        return delta > 0 ? MouseOpacityMore : MouseOpacityLess;
+        return delta < 0 ? MouseOpacityMore : MouseOpacityLess;
     default:
         return MouseNothing;
     }

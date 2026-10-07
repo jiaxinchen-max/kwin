@@ -169,7 +169,7 @@ void Selection::ownSelection(bool own)
 
 bool Selection::handleSelectionRequest(xcb_selection_request_event_t *event)
 {
-    if (event->selection != m_atom) {
+    if (event->selection != m_atom || event->owner != m_window) {
         return false;
     }
 
@@ -180,14 +180,9 @@ bool Selection::handleSelectionRequest(xcb_selection_request_event_t *event)
         return true;
     }
 
-    if (m_window != event->owner || !m_waylandSource) {
-        if (event->time < m_timestamp) {
-            // cancel earlier attempts at receiving a selection
-            // TODO: is this for sure without problems?
-            sendSelectionNotify(event, false);
-            return true;
-        }
-        return false;
+    if (!m_waylandSource) {
+        sendSelectionNotify(event, false);
+        return true;
     }
 
     if (event->target == atoms->targets) {

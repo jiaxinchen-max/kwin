@@ -65,6 +65,7 @@
 #include "effect/effecthandler.h"
 #include "opengl/eglbackend.h"
 #include "opengl/eglcontext.h"
+#include "scene/backgroundeffectitem.h"
 #include "scene/decorationitem.h"
 #include "scene/dndiconitem.h"
 #include "scene/itemrenderer.h"
@@ -211,13 +212,13 @@ static bool addCandidates(SceneView *delegate, Item *item, QList<SurfaceItem *> 
         if (!delegate->shouldRenderItem(child)) {
             continue;
         }
-        if (child->isVisible() && !occluded.contains(child->mapToView(child->boundingRect(), delegate).roundedOut())) {
+        if (child->isVisible() && !occluded.contains(child->mapToView(child->boundingRect(), delegate).rounded())) {
             if (!addCandidates(delegate, static_cast<SurfaceItem *>(child), candidates, maxCount, occluded, corners)) {
                 return false;
             }
         }
     }
-    if (occluded.contains(item->mapToView(item->boundingRect(), delegate).roundedOut())) {
+    if (occluded.contains(item->mapToView(item->boundingRect(), delegate).rounded())) {
         return true;
     }
     if (delegate->shouldRenderItem(item)) {
@@ -250,7 +251,7 @@ static bool addCandidates(SceneView *delegate, Item *item, QList<SurfaceItem *> 
         if (!delegate->shouldRenderItem(child)) {
             continue;
         }
-        if (child->isVisible() && !occluded.contains(child->mapToView(child->boundingRect(), delegate).roundedOut())) {
+        if (child->isVisible() && !occluded.contains(child->mapToView(child->boundingRect(), delegate).rounded())) {
             if (!addCandidates(delegate, static_cast<SurfaceItem *>(child), candidates, maxCount, occluded, corners)) {
                 return false;
             }
@@ -284,7 +285,8 @@ QList<SurfaceItem *> WorkspaceScene::scanoutCandidates(ssize_t maxCount) const
         return child->isVisible()
             && child->opacity() != 0.0
             && !child->boundingRect().isEmpty()
-            && painted_delegate->shouldRenderItem(child);
+            && painted_delegate->shouldRenderItem(child)
+            && painted_delegate->viewport().intersects(child->mapToView(child->boundingRect(), painted_delegate));
     });
     if (needsRendering) {
         return {};
@@ -510,7 +512,7 @@ void WorkspaceScene::frame(SceneView *delegate, OutputFrame *frame)
     }
 }
 
-void WorkspaceScene::prePaint(SceneView *delegate)
+void WorkspaceScene::prePaint(SceneView *delegate, OutputFrame *frame)
 {
     painted_delegate = delegate;
     painted_screen = painted_delegate->logicalOutput();
@@ -532,6 +534,7 @@ void WorkspaceScene::prePaint(SceneView *delegate)
     prePaintData.mask = 0;
     prePaintData.screen = painted_screen;
     prePaintData.view = delegate;
+    prePaintData.frame = frame;
 
     effects->makeOpenGLContextCurrent();
     Q_EMIT preFrameRender();
@@ -560,15 +563,32 @@ static void resetRepaintsHelper(Item *item, SceneView *delegate)
     }
 }
 
-static void accumulateRepaints(Item *item, SceneView *delegate, Region *repaints)
+static void accumulateRepaints(Item *item, SceneView *view, Region *windowRepaints, Region *accumulatedRepaints, Region *forceTranslucent)
 {
-    if (delegate->shouldRenderItem(item)) {
-        *repaints += item->takeDeviceRepaints(delegate);
+    const auto childItems = item->sortedChildItems();
+    auto childIt = childItems.begin();
+    for (; childIt != childItems.end() && (*childIt)->z() < 0; childIt++) {
+        accumulateRepaints(*childIt, view, windowRepaints, accumulatedRepaints, forceTranslucent);
+    }
+    if (auto background = qobject_cast<BackgroundEffectItem *>(item)) {
+        const Rect viewRect = view->mapToDeviceCoordinates(item->mapToView(item->rect(), view)).rounded();
+        if (accumulatedRepaints->intersects(viewRect)) {
+            *windowRepaints |= viewRect;
+            *accumulatedRepaints |= viewRect;
+            if (uint32_t pixels = background->pixelsToExpandRepaintsBelowOpaqueRegions()) {
+                for (const Rect &rect : accumulatedRepaints->rects()) {
+                    *forceTranslucent |= rect.adjusted(-pixels, -pixels, pixels, pixels) & viewRect;
+                }
+            }
+        }
+    } else if (view->shouldRenderItem(item)) {
+        const Region repaints = item->takeDeviceRepaints(view);
+        *windowRepaints |= repaints;
+        *accumulatedRepaints |= repaints;
     }
 
-    const auto childItems = item->childItems();
-    for (Item *childItem : childItems) {
-        accumulateRepaints(childItem, delegate, repaints);
+    for (; childIt != childItems.end(); childIt++) {
+        accumulateRepaints(*childIt, view, windowRepaints, accumulatedRepaints, forceTranslucent);
     }
 }
 
@@ -579,7 +599,6 @@ void WorkspaceScene::preparePaintGenericScreen()
 
         WindowPrePaintData data;
         data.mask = m_paintContext.mask;
-        data.devicePaint = Region::infinite(); // no clipping, so doesn't really matter
 
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data, m_expectedPresentTimestamp);
         m_paintContext.phase2Data.append(Phase2Data{
@@ -623,7 +642,7 @@ void WorkspaceScene::preparePaintSimpleScreen()
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data, m_expectedPresentTimestamp);
         m_paintContext.phase2Data.append(Phase2Data{
             .item = windowItem,
-            .deviceRegion = data.devicePaint & painted_delegate->deviceRect(),
+            .deviceRegion = Region{},
             .deviceOpaque = data.deviceOpaque,
             .mask = data.mask,
         });
@@ -637,21 +656,27 @@ Region WorkspaceScene::collectDamage()
         m_paintContext.deviceDamage = painted_delegate->deviceRect();
         return m_paintContext.deviceDamage;
     } else {
-        // Perform an occlusion cull pass, remove surface damage occluded by opaque windows.
+        // collect all damage, from bottom to top
+        Region accumulatedRepaints;
+        Region forceTranslucent;
+        for (auto &data : m_paintContext.phase2Data) {
+            data.deviceOpaque -= forceTranslucent;
+            accumulateRepaints(data.item, painted_delegate, &data.deviceRegion, &accumulatedRepaints, &forceTranslucent);
+        }
+        accumulateRepaints(m_overlayItem.get(), painted_delegate, &m_paintContext.deviceDamage, &accumulatedRepaints, &forceTranslucent);
+
+        // Perform an occlusion cull pass, to remove surface damage occluded by opaque windows.
         Region opaque;
-        for (int i = m_paintContext.phase2Data.size() - 1; i >= 0; --i) {
-            auto &paintData = m_paintContext.phase2Data[i];
-            accumulateRepaints(paintData.item, painted_delegate, &paintData.deviceRegion);
-            m_paintContext.deviceDamage += paintData.deviceRegion - opaque;
-            // TODO change effects API, so occlusion culling is per item, rather than per window
+        for (auto &paintData : m_paintContext.phase2Data | std::views::reverse) {
+            m_paintContext.deviceDamage |= paintData.deviceRegion - opaque;
+
+            // TODO make occlusion culling per item, rather than per window
             const bool canCover = painted_delegate->shouldRenderItem(paintData.item->surfaceItem())
                 || painted_delegate->shouldRenderHole(paintData.item->surfaceItem());
             if (!(paintData.mask & (PAINT_WINDOW_TRANSLUCENT | PAINT_WINDOW_TRANSFORMED)) && canCover) {
                 opaque += paintData.deviceOpaque;
             }
         }
-
-        accumulateRepaints(m_overlayItem.get(), painted_delegate, &m_paintContext.deviceDamage);
 
         return m_paintContext.deviceDamage & painted_delegate->deviceRect();
     }
@@ -758,6 +783,7 @@ void WorkspaceScene::createStackingOrder()
             continue;
         }
         if (windowItem->isVisible()) {
+            windowItem->window()->ref();
             stacking_order.append(windowItem);
         }
     }
@@ -765,6 +791,9 @@ void WorkspaceScene::createStackingOrder()
 
 void WorkspaceScene::clearStackingOrder()
 {
+    for (WindowItem *windowItem : std::as_const(stacking_order)) {
+        windowItem->window()->unref();
+    }
     stacking_order.clear();
 }
 

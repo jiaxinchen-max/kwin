@@ -30,6 +30,8 @@ public:
     OutputConfigurationStore();
     ~OutputConfigurationStore();
 
+    void clear();
+
     enum class ConfigType {
         Preexisting,
         Generated,
@@ -55,6 +57,9 @@ private:
     {
         QSize size;
         uint32_t refreshRate;
+        // TODO: Eventually convert it from std::optional to a regular property. The output flags
+        // are stored in std::optional because previous versions (6.6.4 and prior) did not save the flags.
+        std::optional<uint32_t> flags;
     };
     struct OutputState
     {

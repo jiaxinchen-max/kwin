@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(PROJECT_VERSION "6.6.1") # Handled by release scripts
+set(PROJECT_VERSION "6.6.7") # Handled by release scripts
 project(KWin VERSION ${PROJECT_VERSION})
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(PROJECT_DEP_VERSION "6.6.0")
+set(PROJECT_DEP_VERSION "6.6.6")
 set(QT_MIN_VERSION "6.10.2")
 set(KF6_MIN_VERSION "6.22.0")
 set(KDE_COMPILERSETTINGS_LEVEL "5.82")

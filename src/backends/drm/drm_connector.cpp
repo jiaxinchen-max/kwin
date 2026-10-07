@@ -95,15 +95,16 @@ static inline bool checkIfEqual(const drmModeModeInfo *one, const drmModeModeInf
         && one->vsync_start == two->vsync_start
         && one->vsync_end == two->vsync_end
         && one->vtotal == two->vtotal
-        && one->vscan == two->vscan;
+        && one->vscan == two->vscan
+        && one->flags == two->flags;
 }
 
-bool DrmConnectorMode::operator==(const DrmConnectorMode &otherMode)
+bool DrmConnectorMode::operator==(const DrmConnectorMode &otherMode) const
 {
     return checkIfEqual(&m_nativeMode, &otherMode.m_nativeMode);
 }
 
-bool DrmConnectorMode::operator==(const drmModeModeInfo &otherMode)
+bool DrmConnectorMode::operator==(const drmModeModeInfo &otherMode) const
 {
     return checkIfEqual(&m_nativeMode, &otherMode);
 }
@@ -191,6 +192,9 @@ QString DrmConnector::connectorName() const
 
 QString DrmConnector::modelName() const
 {
+    if (m_edid.monitorName().isEmpty() && m_edid.serialNumber().isEmpty()) {
+        return connectorName(); // just use the connector name
+    }
     if (m_edid.serialNumber().isEmpty()) {
         return connectorName() + QLatin1Char('-') + m_edid.nameString();
     } else {

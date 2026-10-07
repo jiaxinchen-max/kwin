@@ -1,25 +1,27 @@
 # SPDX-FileCopyrightText: 2009 Thomas Reitelbach <tr@erdfunkstelle.de>
-# SPDX-FileCopyrightText: 2009, 2010, 2023 Johannes Obermayr <johannesobermayr@gmx.de>
-# SPDX-FileCopyrightText: 2009, 2013, 2014, 2015, 2017, 2018, 2019, 2020, 2021 Burkhard Lück <lueck@hube-lueck.de>
+# SPDX-FileCopyrightText: 2009, 2013-2015, 2017-2021 Burkhard Lück <lueck@hube-lueck.de>
+# SPDX-FileCopyrightText: 2009-2010, 2023 Johannes Obermayr <johannesobermayr@gmx.de>
 # SPDX-FileCopyrightText: 2012, 2016, 2020, 2022 Frederik Schwarzer <schwarzer@kde.org>
 # SPDX-FileCopyrightText: 2022 Frank Steinmetzger <dev-kde@felsenfleischer.de>
 # SPDX-FileCopyrightText: 2023 Jannick Kuhr <opensource@kuhr.org>
 # SPDX-FileCopyrightText: 2024 Nicolai Weitkemper <kontakt@nicolaiweitkemper.de>
 # SPDX-FileCopyrightText: 2025 Alois Spitzbart <spitz234@hotmail.com>
+# SPDX-FileCopyrightText: 2026 Alexander Becker <alex-at-kde-l10n-de@freenet.de>
+# SPDX-FileCopyrightText: 2026 Philipp Kiemle <l10n.daphipz@fastmail.de>
 msgid ""
 msgstr ""
 "Project-Id-Version: kcmkwinscreenedges\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-02-05 02:41+0000\n"
-"PO-Revision-Date: 2025-06-07 13:04+0200\n"
-"Last-Translator: Alois Spitzbart <spitz234@hotmail.com>\n"
+"PO-Revision-Date: 2026-04-16 21:40+0200\n"
+"Last-Translator: Alexander Becker <alex-at-kde-l10n-de@freenet.de>\n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.1\n"
+"X-Generator: Lokalize 25.12.3\n"
 
 #: main.cpp:152 touch.cpp:119
 #, kde-format
@@ -59,17 +61,17 @@ msgstr "Fenster zeigen"
 #: main.cpp:162 touch.cpp:129
 #, kde-format
 msgid "%1 - All Desktops"
-msgstr "%1 - Alle Arbeitsflächen"
+msgstr "%1 – Alle Arbeitsflächen"
 
 #: main.cpp:163 touch.cpp:130
 #, kde-format
 msgid "%1 - Current Desktop"
-msgstr "%1 - Aktuelle Arbeitsfläche"
+msgstr "%1 – Aktuelle Arbeitsfläche"
 
 #: main.cpp:164 touch.cpp:131
 #, kde-format
 msgid "%1 - Current Application"
-msgstr "%1 - Aktuelle Anwendung"
+msgstr "%1 – Aktuelle Anwendung"
 
 #: main.cpp:166 touch.cpp:133
 #, kde-format
@@ -166,7 +168,8 @@ msgstr "Höhe des Bildschirms"
 #, kde-format
 msgid ""
 "Change desktop when the mouse cursor is pushed against the edge of the screen"
-msgstr "Arbeitsfläche wechseln, wenn die Maus an einen Bildschirmrand anstößt"
+msgstr ""
+"Arbeitsfläche wechseln, wenn der Mauszeiger an einen Bildschirmrand anstößt"
 
 #. i18n: ectx: property (text), widget (QLabel, desktopSwitchLabel)
 #: main.ui:177
@@ -200,7 +203,7 @@ msgid ""
 "Amount of time required for the mouse cursor to be pushed against the edge "
 "of the screen before the action is triggered"
 msgstr ""
-"Benötigte Zeit zum Anstoßen an einen Arbeitsflächenrand, bevor die Aktion "
+"Zum Anstoßen an einen Bildschirmrand benötigte Zeit, bevor die Aktion "
 "ausgelöst wird"
 
 #. i18n: ectx: property (text), widget (QLabel, activationDelayLabel)
@@ -248,8 +251,8 @@ msgid ""
 "interface elements like maximized windows' close buttons when using multiple "
 "screens."
 msgstr ""
-"Hier können Sie die virtuelle Eckenbarriere zwischen Bildschirmen aktivieren "
-"oder deaktivieren. Die Barriere verhindert, dass sich der Cursor zu einem "
+"Hier können Sie die virtuelle Eckbarriere zwischen Bildschirmen aktivieren "
+"oder deaktivieren. Die Barriere verhindert, dass sich der Zeiger zu einem "
 "anderen Bildschirm bewegt, wenn er bereits eine Bildschirmecke berührt. Dies "
 "erleichtert das Auslösen von Elementen der Benutzeroberfläche, wie z. B. die "
 "Schaltflächen zum Schließen maximierter Fenster, wenn mehrere Bildschirme "
@@ -260,7 +263,7 @@ msgstr ""
 #, kde-format
 msgctxt "@info:tooltip"
 msgid "Prevents cursors from crossing at screen corners."
-msgstr "Verhindert, dass die Cursor die Bildschirmecken überqueren."
+msgstr "Verhindert, dass der Zeiger die Bildschirmecken überquert."
 
 #. i18n: ectx: property (text), widget (QLabel, EdgeBarrierLabel)
 #: main.ui:290
@@ -291,7 +294,7 @@ msgstr ""
 msgctxt "@info:tooltip"
 msgid "Additional distance cursor needs to travel to cross screen edges."
 msgstr ""
-"Zusätzliche Distanz, die der Cursor zurücklegen muss, um den Bildschirmrand "
+"Zusätzliche Distanz, die der Zeiger zurücklegen muss, um den Bildschirmrand "
 "zu überqueren."
 
 #. i18n: ectx: property (specialValueText), widget (QSpinBox, kcfg_EdgeBarrier)

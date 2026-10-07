@@ -4,8 +4,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kwin\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-02-24 02:42+0000\n"
-"PO-Revision-Date: 2026-02-21 17:26+0400\n"
+"POT-Creation-Date: 2026-04-24 02:42+0000\n"
+"PO-Revision-Date: 2026-03-24 10:34+0400\n"
 "Last-Translator: Zayed Al-Saidi <zayed.alsaidi@gmail.com>\n"
 "Language-Team: ar\n"
 "Language: ar\n"
@@ -26,29 +26,29 @@ msgctxt "EMAIL OF TRANSLATORS"
 msgid "Your emails"
 msgstr "zayed.alsaidi@gmail.com,safa1996alfulaij@gmail.com"
 
-#: backends/wayland/wayland_output.cpp:481
+#: backends/wayland/wayland_output.cpp:482
 #, kde-format
 msgid "Press right control to ungrab pointer"
 msgstr "اضغط على مفتاح التحكم الأيمن لفك المؤشر"
 
-#: backends/wayland/wayland_output.cpp:483
+#: backends/wayland/wayland_output.cpp:484
 #, kde-format
 msgid "Press right control key to grab pointer"
 msgstr "اضغط على مفتاح التحكم الأيمن للحصول على المؤشر"
 
-#: backends/wayland/wayland_output.cpp:487
+#: backends/wayland/wayland_output.cpp:488
 #, kde-format
 msgctxt ""
 "Title of nested KWin Wayland with Wayland socket identifier as argument"
 msgid "KDE Wayland Compositor %1"
 msgstr "مراكب ويلاند كيدي %1"
 
-#: backends/wayland/wayland_output.cpp:490
+#: backends/wayland/wayland_output.cpp:491
 #, kde-format
 msgid "- Output disabled"
 msgstr "- الخرج معطّل"
 
-#: backends/wayland/wayland_output.cpp:492
+#: backends/wayland/wayland_output.cpp:493
 #, kde-format
 msgid "- Output dimmed"
 msgstr "- الخرج معتم"
@@ -139,7 +139,7 @@ msgstr "تشكيلة أي سي سي \"%1\" معطوبة، العناصر الأ�
 #: core/iccprofile.cpp:489
 #, kde-format
 msgid "ICC profile \"%1\" with only BToD tags isn't supported"
-msgstr "تشكيلة أي سي سي \"%1\" مع علامات BToD  فقط غير مدعومة"
+msgstr "تشكيلة أي سي سي \"%1\" مع علامات BToD فقط غير مدعومة"
 
 #: core/iccprofile.cpp:527
 #, kde-format
@@ -1154,7 +1154,7 @@ msgstr "فئة معالج الرسوميات:"
 #: debug_console.ui:153
 #, kde-format
 msgid "OpenGL Version:"
-msgstr "إصدارة  أوبن‌جي‌إل:"
+msgstr "إصدارة أوبن‌جي‌إل:"
 
 #. i18n: ectx: property (text), widget (QLabel, label_8)
 #: debug_console.ui:160
@@ -1172,7 +1172,7 @@ msgstr "امتدادات المنصة"
 #: debug_console.ui:242
 #, kde-format
 msgid "OpenGL (ES) Extensions"
-msgstr "امتدادات  أوبن‌جي‌إل (ES)"
+msgstr "امتدادات أوبن‌جي‌إل (ES)"
 
 #. i18n: ectx: attribute (title), widget (QWidget, keyboard)
 #: debug_console.ui:263
@@ -1450,59 +1450,59 @@ msgstr "عطّل خيارات الضّبط"
 msgid "Indicate that KWin has recently crashed n times"
 msgstr "يشير إلى عدد انهيارات كوين"
 
-#: main_wayland.cpp:305
+#: main_wayland.cpp:303
 #, kde-format
 msgid "Start a rootless Xwayland server."
 msgstr "ابدأ خادم اكس_ويلاند دون صلاحية الجذر."
 
-#: main_wayland.cpp:308
+#: main_wayland.cpp:306
 #, kde-format
 msgid ""
 "Name of the Wayland socket to listen on. If not set \"wayland-0\" is used."
 msgstr "اسم مقبس كوين. إذا لم يعين سيستخدم \"wayland-0\""
 
-#: main_wayland.cpp:312
+#: main_wayland.cpp:310
 #, kde-format
 msgid "The X11 Display to use in windowed mode on platform X11."
 msgstr "شاشة اكس11 التي ستستخدم في وضع المؤطر على منصة اكس11."
 
-#: main_wayland.cpp:316
+#: main_wayland.cpp:314
 #, kde-format
 msgid "The Wayland Display to use in windowed mode on platform Wayland."
 msgstr "شاشة ويلاند التي ستستخدم في وضع المؤطر على منصة ويلاند."
 
-#: main_wayland.cpp:318
+#: main_wayland.cpp:316
 #, kde-format
 msgid "Render to a virtual framebuffer."
 msgstr "التصيير إلى framebuffer افتراضي"
 
-#: main_wayland.cpp:320
+#: main_wayland.cpp:318
 #, kde-format
 msgid "The width for windowed mode. Default width is 1024."
 msgstr "عرض نمط المؤطر. العرض المبدئي 1024."
 
-#: main_wayland.cpp:324
+#: main_wayland.cpp:322
 #, kde-format
 msgid "The height for windowed mode. Default height is 768."
 msgstr "ارتفاع نمط المؤطر. الارتفاع المبدئي 768."
 
-#: main_wayland.cpp:329
+#: main_wayland.cpp:327
 #, kde-format
 msgid "Whether or not to make windowed mode fullscreen"
 msgstr "ما إذا كان سيجعل وضع النافذة ملء الشاشة أم لا"
 
-#: main_wayland.cpp:333
+#: main_wayland.cpp:331
 #, kde-format
 msgid "The scale for windowed mode. Default value is 1."
 msgstr "مقياس التكبير لوضع المؤطر. المبدئي 1."
 
-#: main_wayland.cpp:338
+#: main_wayland.cpp:336
 #, kde-format
 msgid ""
 "The number of windows to open as outputs in windowed mode. Default value is 1"
 msgstr "عدد النوافذ التي ستفتح كمخرجات في الوضع المؤطر. القيمة المبدئي هي 1"
 
-#: main_wayland.cpp:343
+#: main_wayland.cpp:341
 #, kde-format
 msgid ""
 "Wayland socket to use for incoming connections. This can be combined with --"
@@ -1511,7 +1511,7 @@ msgstr ""
 "مقبس ويلاند لاستخدامه في الاتصالات الواردة. يمكن دمج هذا --socket لتسمية "
 "المقبس"
 
-#: main_wayland.cpp:347
+#: main_wayland.cpp:345
 #, kde-format
 msgid ""
 "XWayland socket to use for Xwayland's incoming connections. This can be set "
@@ -1519,63 +1519,63 @@ msgid ""
 msgstr ""
 "مقبس ويلاند_اكس لاستخدامه لاتصالات ويلاند_اكس الواردة. يمكن تعيينها عدة مرات"
 
-#: main_wayland.cpp:351
+#: main_wayland.cpp:349
 #, kde-format
 msgid "Name of the xwayland display that has been pre-set up"
 msgstr "اسم شاشة ويلاند_اكس المعدة مسبقًا"
 
-#: main_wayland.cpp:355
+#: main_wayland.cpp:353
 #, kde-format
 msgid "Name of the xauthority file "
 msgstr "اسم ملف xauthority "
 
-#: main_wayland.cpp:359
+#: main_wayland.cpp:357
 #, kde-format
 msgid "Exits this instance so it can be restarted by kwin_wayland_wrapper."
 msgstr "اخرج من هذه النسخة حتى يمكن إعادة تشغيله بواسطة kwin_wayland_wrappe"
 
-#: main_wayland.cpp:361
+#: main_wayland.cpp:359
 #, kde-format
 msgid "Render through drm node."
 msgstr "التصيير عن طريق drm."
 
-#: main_wayland.cpp:362
+#: main_wayland.cpp:360
 #, kde-format
 msgid ""
 "Extract locale information from locale1 rather than the user's configuration"
 msgstr "استخرج معلومات المحليات من locale1 عوضاً عن ضبط المستخدم"
 
-#: main_wayland.cpp:389
+#: main_wayland.cpp:387
 #, kde-format
 msgid "Input method that KWin starts."
 msgstr "طريقة الإدخال الذي يبدأه كوين"
 
-#: main_wayland.cpp:395
+#: main_wayland.cpp:393
 #, kde-format
 msgid "Starts the session in locked mode."
 msgstr "تبدأ الجلسة في النمط المقفل."
 
-#: main_wayland.cpp:399
+#: main_wayland.cpp:397
 #, kde-format
 msgid "Starts the session without lock screen support."
 msgstr "تبدأ الجَلسة دون دعم قفل الشاشة"
 
-#: main_wayland.cpp:404
+#: main_wayland.cpp:402
 #, kde-format
 msgid "Starts the session without global shortcuts support."
 msgstr "تبدأ الجلسة دون دعم الاختصارات العامة"
 
-#: main_wayland.cpp:409
+#: main_wayland.cpp:407
 #, kde-format
 msgid "Disable KActivities integration."
 msgstr "عطل تكامل الأنشطة KActivities"
 
-#: main_wayland.cpp:414
+#: main_wayland.cpp:412
 #, kde-format
 msgid "Exit after the session application, which is started by KWin, closed."
 msgstr "اخرج بعد إغلاق تطبيق الجَلسة، الذي بدأه كوين."
 
-#: main_wayland.cpp:419
+#: main_wayland.cpp:417
 #, kde-format
 msgid "Applications to start once Wayland and Xwayland server are started"
 msgstr "التطبيقات التي تبدأ حين بَدْء خادم ويلاند و ويلاند_اكس"
@@ -2160,7 +2160,7 @@ msgstr "امحُ آخر علامة للفأرة"
 msgid "Clear Mouse Marks"
 msgstr "امحُ علامات الفأرة"
 
-#: plugins/mousemark/mousemark_config.cpp:87
+#: plugins/mousemark/mousemark_config.cpp:88
 #, kde-format
 msgctxt "Suffix"
 msgid " pixel"
@@ -2423,7 +2423,7 @@ msgstr "نوع تركيب غير متاح"
 #: plugins/screencast/screencastmanager.cpp:62
 #, kde-format
 msgid "Could not find window id %1"
-msgstr "لا يمكن العثور النافذة ذات المعرف  %1"
+msgstr "لا يمكن العثور النافذة ذات المعرف %1"
 
 #: plugins/screencast/screencastmanager.cpp:118
 #, kde-format
@@ -3162,7 +3162,7 @@ msgstr "مكبّرة عمودياً"
 #: rulesettings.kcfg:201
 #, kde-format
 msgid "Maximized vertically rule type"
-msgstr "نوع القاعدة لكبّر النّافذة رأسيًّا"
+msgstr "نوع القاعدة لكبّر النّافذة عموديًا"
 
 #. i18n: ectx: label, entry (maximizehoriz), group ($(ruleDescriptionOrNumber))
 #: rulesettings.kcfg:208
@@ -3747,7 +3747,7 @@ msgstr "كبّر النّافذة"
 #: useractions.cpp:832
 #, kde-format
 msgid "Maximize Window Vertically"
-msgstr "كبّر النّافذة رأسيًّا"
+msgstr "كبّر النّافذة عموديًا"
 
 #: useractions.cpp:834
 #, kde-format
@@ -3847,7 +3847,7 @@ msgstr "كبّر النّافذة أفقيًّا"
 #: useractions.cpp:872
 #, kde-format
 msgid "Expand Window Vertically"
-msgstr "كبّر النّافذة رأسيًّا"
+msgstr "كبّر النّافذة عموديًا"
 
 #: useractions.cpp:874
 #, kde-format
@@ -3857,7 +3857,7 @@ msgstr "قلص النافذة أفقيًا"
 #: useractions.cpp:876
 #, kde-format
 msgid "Shrink Window Vertically"
-msgstr "قلص النافذة رأسيًا"
+msgstr "قلص النافذة عموديًا"
 
 #: useractions.cpp:878
 #, kde-format
@@ -4079,72 +4079,72 @@ msgstr "فعّل النّافذة (%1)"
 msgid "unknown"
 msgstr "مجهول"
 
-#: virtualdesktops.cpp:731 virtualdesktops.cpp:810
+#: virtualdesktops.cpp:732 virtualdesktops.cpp:811
 #, kde-format
 msgid "Desktop %1"
 msgstr "سطح المكتب %1"
 
-#: virtualdesktops.cpp:817
+#: virtualdesktops.cpp:818
 #, kde-format
 msgid "Switch to Next Desktop"
 msgstr "بدّل إلى سطح المكتب التّالي"
 
-#: virtualdesktops.cpp:818
+#: virtualdesktops.cpp:819
 #, kde-format
 msgid "Switch to Previous Desktop"
 msgstr "بدّل إلى سطح المكتب السّابق"
 
-#: virtualdesktops.cpp:821
+#: virtualdesktops.cpp:822
 #, kde-format
 msgid "Switch One Desktop to the Right"
 msgstr "بدّل إلى سطح المكتب الأيمن"
 
-#: virtualdesktops.cpp:822
+#: virtualdesktops.cpp:823
 #, kde-format
 msgid "Switch One Desktop to the Left"
 msgstr "بدّل إلى سطح المكتب الأيسر"
 
-#: virtualdesktops.cpp:823
+#: virtualdesktops.cpp:824
 #, kde-format
 msgid "Switch One Desktop Up"
 msgstr "بدّل إلى سطح المكتب الأعلى"
 
-#: virtualdesktops.cpp:824
+#: virtualdesktops.cpp:825
 #, kde-format
 msgid "Switch One Desktop Down"
 msgstr "بدّل إلى سطح المكتب الأسفل"
 
-#: virtualdesktops.cpp:912
+#: virtualdesktops.cpp:913
 #, kde-format
 msgid "Switch to Desktop %1"
 msgstr "بدّل إلى سطح المكتب %1"
 
-#: wayland/outputmanagement_v2.cpp:602
+#: wayland/outputmanagement_v2.cpp:603
 #, kde-format
 msgid "One of the relevant outputs is no longer available"
 msgstr "أحد المخرجات ذات الصلة لم يعد متاحًا"
 
-#: wayland/outputmanagement_v2.cpp:620
+#: wayland/outputmanagement_v2.cpp:621
 #, kde-format
 msgid "Disabling all outputs through configuration changes is not allowed"
 msgstr "لا يُسمح بتعطيل جميع المخرجات من خلال تغييرات الضبط"
 
-#: wayland/outputmanagement_v2.cpp:637
+#: wayland/outputmanagement_v2.cpp:638
 #, kde-format
 msgid "Cannot add a custom mode with an empty size"
 msgstr "لا يمكن إضافة وضع مخصص بحجم فارغ"
 
-#: wayland/outputmanagement_v2.cpp:641
+#: wayland/outputmanagement_v2.cpp:642
 #, kde-format
 msgid "Cannot add a custom mode with a refresh rate of zero Hz"
 msgstr "لا يمكن إضافة وضع مخصص بمعدل تحديث يبلغ صفر هرتز"
 
-#: wayland/outputmanagement_v2.cpp:659
+#: wayland/outputmanagement_v2.cpp:660
 #, kde-format
 msgid "Position of output %s is way too large (%d, %d)"
 msgstr "موضع الإخراج %s كبير جدًا (%d، %d)"
 
-#: wayland/outputmanagement_v2.cpp:676
+#: wayland/outputmanagement_v2.cpp:677
 #, kde-format
 msgid "The driver rejected the output configuration"
 msgstr "رفض السائق ضبط الإخراج"
@@ -4155,7 +4155,7 @@ msgctxt "Application is not responding, appended to window title"
 msgid "(Not Responding)"
 msgstr "(لا يستجيب)"
 
-#: workspace.cpp:1755
+#: workspace.cpp:1764
 #, kde-format
 msgctxt "Introductory text shown in the support information."
 msgid ""

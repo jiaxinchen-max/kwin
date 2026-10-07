@@ -33,7 +33,7 @@
 namespace KWin
 {
 
-static std::unique_ptr<EglContext> s_globalShareContext;
+static std::shared_ptr<EglContext> s_globalShareContext;
 
 EglBackend::EglBackend()
 {

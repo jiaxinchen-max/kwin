@@ -1259,7 +1259,7 @@ void Window::updateInteractiveMoveResize(const QPointF &global, Qt::KeyboardModi
         if (isRequestedFullScreen()) {
             nextMoveResizeGeom = workspace()->clientArea(FullScreenArea, this, global);
         } else {
-            nextMoveResizeGeom = nextInteractiveMoveGeometry(global);
+            nextMoveResizeGeom = nextInteractiveMoveGeometry(frameGeometry());
         }
 
         if (nextMoveResizeGeom != currentMoveResizeGeom) {
@@ -1675,16 +1675,15 @@ RectF Window::nextInteractiveResizeGeometry(const QPointF &global) const
     return nextMoveResizeGeom;
 }
 
-RectF Window::nextInteractiveMoveGeometry(const QPointF &global) const
+RectF Window::nextInteractiveMoveGeometry(const RectF &rect) const
 {
-    const RectF currentMoveResizeGeom = frameGeometry();
     if (!isMovable()) {
-        return currentMoveResizeGeom;
+        return rect;
     }
 
-    RectF nextMoveResizeGeom = currentMoveResizeGeom;
-    nextMoveResizeGeom.moveTopLeft(QPointF(global.x() - interactiveMoveOffset().x() * currentMoveResizeGeom.width(),
-                                           global.y() - interactiveMoveOffset().y() * currentMoveResizeGeom.height()));
+    RectF nextMoveResizeGeom = rect;
+    nextMoveResizeGeom.moveTopLeft(QPointF(interactiveMoveResizeAnchor().x() - interactiveMoveOffset().x() * rect.width(),
+                                           interactiveMoveResizeAnchor().y() - interactiveMoveOffset().y() * rect.height()));
     nextMoveResizeGeom.moveTopLeft(workspace()->adjustWindowPosition(this, nextMoveResizeGeom.topLeft(), isUnrestrictedInteractiveMoveResize()));
 
     if (!isUnrestrictedInteractiveMoveResize()) {
@@ -2683,7 +2682,7 @@ void Window::updateDecorationInputShape()
     const RectF innerRect = RectF(QPointF(borderLeft(), borderTop()), decoratedWindow()->size());
     const RectF outerRect = innerRect + borders + resizeBorders;
 
-    m_decoration.inputRegion = Region(outerRect.roundedOut()) - innerRect.roundedOut();
+    m_decoration.inputRegion = Region(outerRect.roundedOut()) - innerRect.roundedIn();
 }
 
 void Window::updateDecorationBorderRadius()
@@ -4545,10 +4544,12 @@ bool Window::isOffscreenRendering() const
 void Window::maybeSendFrameCallback()
 {
     if (m_windowItem && !m_windowItem->isVisible()) {
+        ref();
         const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
         m_windowItem->framePainted(nullptr, output(), nullptr, timestamp);
         // update refresh rate, it might have changed
         m_offscreenFramecallbackTimer.start(1'000'000 / output()->refreshRate());
+        unref();
     }
 }
 

@@ -303,7 +303,9 @@ public:
             return false;
         }
 
-        ScreenLocker::KSldApp::self()->userActivity();
+        if (!event->warp) {
+            ScreenLocker::KSldApp::self()->userActivity();
+        }
 
         auto window = input()->findToplevel(event->position);
         if (window && window->isClient() && window->isLockScreen()) {
@@ -324,7 +326,9 @@ public:
             return false;
         }
 
-        ScreenLocker::KSldApp::self()->userActivity();
+        if (event->state == PointerButtonState::Pressed) {
+            ScreenLocker::KSldApp::self()->userActivity();
+        }
 
         auto window = input()->findToplevel(event->position);
         if (window && window->isClient() && window->isLockScreen()) {
@@ -378,7 +382,9 @@ public:
             return false;
         }
 
-        ScreenLocker::KSldApp::self()->userActivity();
+        if (event->state == KeyboardKeyState::Pressed) {
+            ScreenLocker::KSldApp::self()->userActivity();
+        }
 
         // send event to KSldApp for global accel
         // if event is set to accepted it means a whitelisted shortcut was triggered
@@ -1387,7 +1393,7 @@ std::optional<Options::MouseCommand> globalWindowWheelAction(PointerAxisEvent *e
     if (input()->pointer()->isConstrained() || workspace()->globalShortcutsDisabled()) {
         return std::nullopt;
     }
-    const auto ret = options->operationWindowMouseWheel(-event->delta);
+    const auto ret = options->operationWindowMouseWheel((event->inverted ? -1 : 1) * event->delta);
     if (ret == Options::MouseCommand::MouseNothing) {
         return std::nullopt;
     } else {
@@ -1703,7 +1709,7 @@ public:
         }
         if ((event->orientation == Qt::Vertical) && decoration->window()->titlebarPositionUnderMouse()) {
             if (float delta = m_accumulator.accumulate(event)) {
-                decoration->window()->performMousePressCommand(options->operationTitlebarMouseWheel(delta * -1),
+                decoration->window()->performMousePressCommand(options->operationTitlebarMouseWheel((event->inverted ? -1 : 1) * delta),
                                                                event->position);
             }
         }
@@ -3713,7 +3719,7 @@ void InputDeviceHandler::updateDecoration()
     Decoration::DecoratedWindowImpl *decoration = nullptr;
     auto hover = m_hover.window.data();
     if (hover && hover->decoratedWindow()) {
-        if (!hover->clientGeometry().contains(flooredPoint(position()))) {
+        if (!hover->clientGeometry().contains(position())) {
             // input device above decoration
             decoration = hover->decoratedWindow();
         }

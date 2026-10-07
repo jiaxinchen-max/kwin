@@ -40,7 +40,7 @@ msgstr "不重要"
 #: optionsmodel.cpp:199
 #, kde-format
 msgid "Exact match"
-msgstr "完全匹配"
+msgstr "精确匹配"
 
 #: optionsmodel.cpp:200
 #, kde-format

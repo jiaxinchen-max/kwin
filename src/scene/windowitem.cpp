@@ -51,6 +51,7 @@ WindowItem::WindowItem(Window *window, Item *parent)
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &WindowItem::updateVisibility);
     connect(workspace(), &Workspace::currentActivityChanged, this, &WindowItem::updateVisibility);
     connect(workspace(), &Workspace::currentDesktopChanged, this, &WindowItem::updateVisibility);
+    connect(workspace(), &Workspace::dpmsStateChanged, this, &WindowItem::updateVisibility);
     updateVisibility();
 
     connect(window, &Window::opacityChanged, this, &WindowItem::updateOpacity);
@@ -91,6 +92,11 @@ Window *WindowItem::window() const
 EffectWindow *WindowItem::effectWindow() const
 {
     return m_effectWindow.get();
+}
+
+Item *WindowItem::windowContainer() const
+{
+    return m_windowContainer.get();
 }
 
 void WindowItem::refVisible(int reason)
@@ -186,7 +192,8 @@ void WindowItem::updateVisibility()
     setVisible(visible);
 
     if (m_window->readyForPainting()) {
-        m_window->setSuspended(!visible && !m_window->isOffscreenRendering());
+        const bool dpmsOff = workspace()->dpmsState() != Workspace::DpmsState::On;
+        m_window->setSuspended((!visible || dpmsOff) && !m_window->isOffscreenRendering());
     }
 }
 
