@@ -17,6 +17,8 @@
 #include "opengl/eglcontext.h"
 #include "opengl/glframebuffer.h"
 #include "utils/softwarevsyncmonitor.h"
+#include "wayland/linuxdmabufv1clientbuffer.h"
+#include "wayland_server.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -24,6 +26,7 @@
 #include <dlfcn.h>
 #include <drm_fourcc.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <cstring>
@@ -861,6 +864,68 @@ AndroidEglBackend::~AndroidEglBackend()
     m_layers.clear();
 }
 
+void AndroidEglBackend::exportDmaBufFeedback()
+{
+    // Advertise linux-dmabuf formats/modifiers to Wayland clients so external
+    // GL/Vulkan clients (e.g. Mesa Turnip apps in a proot container) can create
+    // dma-buf swapchains and share zero-copy buffers with this compositor.
+    //
+    // The generic EglBackend::initWayland() path is not used here: the Android
+    // backend has no DrmDevice (KGSL exposes no DRM render node). Build the
+    // feedback directly from the EGL display's import formats. For the main
+    // device, prefer the driver's render node if it reports one, otherwise use
+    // the dev_t of the GPU device node (/dev/kgsl-3d0); a client rendering on the
+    // same KGSL/Turnip GPU sees the same node, so Mesa's Wayland WSI device
+    // matching lines up.
+    if (!WaylandServer::self()) {
+        return;
+    }
+    EglDisplay *display = eglDisplayObject();
+    if (!display) {
+        return;
+    }
+    // Only the Zink/Turnip path exposes EGL_EXT_image_dma_buf_import(_modifiers);
+    // in Android system GLES mode this is empty and clients use the
+    // AHardwareBuffer protocol instead, so there is nothing to advertise.
+    const auto formats = display->nonExternalOnlySupportedDrmFormats();
+    if (formats.isEmpty()) {
+        qCInfo(KWIN_ANDROID_EGL) << "EGL display exposes no dma-buf import formats;"
+                                 << "not advertising linux-dmabuf (needs the Zink/Turnip path)";
+        return;
+    }
+
+    dev_t mainDevice = 0;
+    if (const std::optional<dev_t> renderNode = display->renderDevNode()) {
+        mainDevice = *renderNode;
+    } else {
+        const QByteArray kgslDevice = qEnvironmentVariableIsSet("KWIN_ANDROID_KGSL_DEVICE")
+            ? qgetenv("KWIN_ANDROID_KGSL_DEVICE")
+            : QByteArrayLiteral("/dev/kgsl-3d0");
+        struct stat deviceStat = {};
+        if (stat(kgslDevice.constData(), &deviceStat) == 0) {
+            mainDevice = deviceStat.st_rdev;
+        } else {
+            qCWarning(KWIN_ANDROID_EGL) << "Could not stat" << kgslDevice
+                                        << "for linux-dmabuf main device; advertising device 0";
+        }
+    }
+
+    QList<LinuxDmaBufV1Feedback::Tranche> tranches;
+    tranches.append(LinuxDmaBufV1Feedback::Tranche{
+        .device = mainDevice,
+        .flags = {},
+        .formatTable = formats,
+    });
+
+    LinuxDmaBufV1ClientBufferIntegration *dmabuf = waylandServer()->linuxDmabuf();
+    dmabuf->setRenderBackend(this);
+    dmabuf->setSupportedFormatsWithModifiers(tranches);
+    waylandServer()->setRenderBackend(this);
+
+    qCInfo(KWIN_ANDROID_EGL) << "Advertised linux-dmabuf to clients:" << formats.count()
+                             << "formats, main_device" << mainDevice;
+}
+
 void AndroidEglBackend::init()
 {
     qCDebug(KWIN_ANDROID_EGL) << "Initializing Android EGL backend";
@@ -869,6 +934,9 @@ void AndroidEglBackend::init()
         setFailed("Failed to initialize EGL");
         return;
     }
+
+    // Let external Wayland clients import dma-buf buffers (zink/Turnip path only).
+    exportDmaBufFeedback();
     
     // Connect to backend signals
     connect(m_backend, &AndroidBackend::outputAdded, this, &AndroidEglBackend::addOutput);
