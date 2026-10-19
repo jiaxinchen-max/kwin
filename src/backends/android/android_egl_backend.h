@@ -131,6 +131,7 @@ public:
 
 private:
     bool initializeEgl();
+    void exportDmaBufFeedback();
     void addOutput(BackendOutput *output);
 
     AndroidBackend *const m_backend;
