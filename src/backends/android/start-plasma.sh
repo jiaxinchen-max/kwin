@@ -6,10 +6,19 @@ set -e
 INSTALL_DEPS=0
 VERBOSE_LOG=0
 DEBUG_RENDERING=0
+# Compositor-only mode: run kwin_wayland (+ Xwayland) natively but do NOT start
+# the native Plasma shell/daemons. The Plasma session instead runs inside a
+# proot/glibc container and connects to this compositor over the shared Wayland
+# socket in $XDG_RUNTIME_DIR (the container runs its own D-Bus; the native bus
+# cannot be shared across proot). See packaging/container/plasma-container-session.sh.
+COMPOSITOR_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --install-deps|-i)
             INSTALL_DEPS=1
+            ;;
+        --compositor-only|--container-session)
+            COMPOSITOR_ONLY=1
             ;;
         -verbose|--verbose)
             VERBOSE_LOG=1
@@ -232,14 +241,25 @@ else
 fi
 
 MISSING_COMMANDS=()
-for cmd in dbus-launch kwin_wayland plasmashell; do
+if [ "$COMPOSITOR_ONLY" = "1" ]; then
+    # Compositor-only needs just the compositor and a bus for KWin's own use;
+    # the Plasma shell and its daemons live in the container, not natively.
+    REQUIRED_COMMANDS=(dbus-launch kwin_wayland)
+else
+    REQUIRED_COMMANDS=(dbus-launch kwin_wayland plasmashell)
+fi
+for cmd in "${REQUIRED_COMMANDS[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         MISSING_COMMANDS+=("$cmd")
     fi
 done
-KACTIVITYMANAGERD_CMD="$(find_kactivitymanagerd || true)"
-if [ -z "$KACTIVITYMANAGERD_CMD" ]; then
-    MISSING_COMMANDS+=("kactivitymanagerd")
+if [ "$COMPOSITOR_ONLY" = "1" ]; then
+    KACTIVITYMANAGERD_CMD=""
+else
+    KACTIVITYMANAGERD_CMD="$(find_kactivitymanagerd || true)"
+    if [ -z "$KACTIVITYMANAGERD_CMD" ]; then
+        MISSING_COMMANDS+=("kactivitymanagerd")
+    fi
 fi
 
 if [ ${#MISSING_COMMANDS[@]} -gt 0 ]; then
@@ -318,6 +338,11 @@ echo "  Client linux-dmabuf: $KWIN_ANDROID_LINUX_DMABUF"
 echo ""
 
 # 启动D-Bus
+# NOTE: the container Plasma session runs its OWN D-Bus. Sharing this native bus
+# across the proot boundary does not work: proot cannot forge SO_PEERCRED, so the
+# container (which believes it is uid 0) fails dbus's EXTERNAL auth against the
+# daemon. So compositor-only uses the same dbus-launch as the normal session;
+# it is only for KWin's own use.
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     echo "Starting D-Bus..."
     if command -v dbus-launch >/dev/null 2>&1; then
@@ -408,6 +433,7 @@ KWIN_ANDROID_SESSION_ENV="${KWIN_ANDROID_SESSION_ENV:-$KWIN_ANDROID_RUNTIME_ROOT
     printf 'export WAYLAND_DISPLAY=%q\n' "$WAYLAND_DISPLAY"
     printf 'export XDG_RUNTIME_DIR=%q\n' "$XDG_RUNTIME_DIR"
     printf 'export TMPDIR=%q\n' "$TMPDIR"
+    printf 'export DBUS_SESSION_BUS_ADDRESS=%q\n' "${DBUS_SESSION_BUS_ADDRESS:-}"
 } > "$KWIN_ANDROID_SESSION_ENV"
 chmod 0600 "$KWIN_ANDROID_SESSION_ENV" 2>/dev/null || true
 
@@ -416,60 +442,70 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
 fi
 
 # 启动Plasma组件
-echo "Starting Plasma components..."
-if command -v kdeinit6 >/dev/null 2>&1; then
-    kdeinit6 &
-    KDEINIT_PID=$!
-elif command -v kdeinit5 >/dev/null 2>&1; then
-    kdeinit5 &
-    KDEINIT_PID=$!
+if [ "$COMPOSITOR_ONLY" = "1" ]; then
+    echo ""
+    echo "✓ Compositor-only mode: the native Plasma shell was NOT started."
+    echo "  Run the Plasma session inside the container, pointing it at this"
+    echo "  runtime dir (it runs its own D-Bus; see packaging/container/README.md):"
+    echo "    proot-distro login debian --bind $XDG_RUNTIME_DIR:/run/wl \\"
+    echo "      -- /root/plasma-container-session.sh"
+    echo "  Shared Wayland socket: $KWIN_WAYLAND_SOCKET  (container: /run/wl/$KWIN_WAYLAND_SOCKET)"
 else
-    echo "⚠ kdeinit not found, skipping"
-fi
-sleep 1
+    echo "Starting Plasma components..."
+    if command -v kdeinit6 >/dev/null 2>&1; then
+        kdeinit6 &
+        KDEINIT_PID=$!
+    elif command -v kdeinit5 >/dev/null 2>&1; then
+        kdeinit5 &
+        KDEINIT_PID=$!
+    else
+        echo "⚠ kdeinit not found, skipping"
+    fi
+    sleep 1
 
-if command -v kded6 >/dev/null 2>&1; then
-    kded6 &
-    KDED_PID=$!
-elif command -v kded5 >/dev/null 2>&1; then
-    kded5 &
-    KDED_PID=$!
-else
-    echo "⚠ kded not found, skipping"
-fi
+    if command -v kded6 >/dev/null 2>&1; then
+        kded6 &
+        KDED_PID=$!
+    elif command -v kded5 >/dev/null 2>&1; then
+        kded5 &
+        KDED_PID=$!
+    else
+        echo "⚠ kded not found, skipping"
+    fi
 
-echo "Starting kactivitymanagerd: $KACTIVITYMANAGERD_CMD"
-if [ -x "$KACTIVITYMANAGERD_CMD" ]; then
-    "$KACTIVITYMANAGERD_CMD" &
-else
-    sh -c "$KACTIVITYMANAGERD_CMD" &
-fi
-KACTIVITYMANAGERD_PID=$!
-sleep 1
-if ! kill -0 "$KACTIVITYMANAGERD_PID" 2>/dev/null; then
-    echo "✗ Error: kactivitymanagerd exited during startup"
-    wait "$KACTIVITYMANAGERD_PID" || true
-    exit 1
-fi
+    echo "Starting kactivitymanagerd: $KACTIVITYMANAGERD_CMD"
+    if [ -x "$KACTIVITYMANAGERD_CMD" ]; then
+        "$KACTIVITYMANAGERD_CMD" &
+    else
+        sh -c "$KACTIVITYMANAGERD_CMD" &
+    fi
+    KACTIVITYMANAGERD_PID=$!
+    sleep 1
+    if ! kill -0 "$KACTIVITYMANAGERD_PID" 2>/dev/null; then
+        echo "✗ Error: kactivitymanagerd exited during startup"
+        wait "$KACTIVITYMANAGERD_PID" || true
+        exit 1
+    fi
 
-if command -v kbuildsycoca6 >/dev/null 2>&1; then
-    kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
-elif command -v kbuildsycoca5 >/dev/null 2>&1; then
-    kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
-fi
+    if command -v kbuildsycoca6 >/dev/null 2>&1; then
+        kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+    elif command -v kbuildsycoca5 >/dev/null 2>&1; then
+        kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
+    fi
 
-if command -v plasmashell >/dev/null 2>&1; then
-    plasmashell &
-    PLASMASHELL_PID=$!
-else
-    echo "✗ Error: plasmashell not found"
-    exit 1
-fi
-sleep 1
-if ! kill -0 "$PLASMASHELL_PID" 2>/dev/null; then
-    echo "✗ Error: plasmashell exited during startup"
-    wait "$PLASMASHELL_PID" || true
-    exit 1
+    if command -v plasmashell >/dev/null 2>&1; then
+        plasmashell &
+        PLASMASHELL_PID=$!
+    else
+        echo "✗ Error: plasmashell not found"
+        exit 1
+    fi
+    sleep 1
+    if ! kill -0 "$PLASMASHELL_PID" 2>/dev/null; then
+        echo "✗ Error: plasmashell exited during startup"
+        wait "$PLASMASHELL_PID" || true
+        exit 1
+    fi
 fi
 
 echo ""
