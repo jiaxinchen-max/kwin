@@ -370,6 +370,7 @@ X11 应用 → gl4es → 系统 GLES → AHardwareBuffer → DRI3 socket → Xwa
 | `KWIN_ANDROID_AHB_IMPORT` | 输出 buffer 导入覆盖：`native` / `dmabuf` / `off`；未设置时由渲染模式钉定（system→native、zink→dmabuf、llvmpipe→off），三者互不回退。 |
 | `KWIN_ANDROID_CLIENT_BUFFER_IMPORT` | 客户端 buffer 导入：`native` / `dmabuf`。 |
 | `TERMUX_RENDER_AHB_RECEIVE` | termux-render 接收输出句柄方式：`native`（还原完整 AHardwareBuffer）/ `dmabuf`（只保留 dma-buf fd）。 |
+| `KWIN_ANDROID_LINUX_DMABUF` | 是否向 Wayland 客户端通告标准 `zwp_linux_dmabuf_v1`（让容器等外部 GL/Vulkan 客户端零拷贝共享 dma-buf）：`on` / `off`。由 launcher 按模式显式设置(zink→on,system/llvmpipe→off),不自动探测;`on` 但当前 renderer 不支持 dma-buf 导入时大声报警而非静默跳过。main_device 取 render node 或 `/dev/kgsl-3d0` 的 dev_t。 |
 | `TERMUX_ANDROID_ZINK` | libepoxy 选择 Mesa（`1`）或系统 EGL/GLES（未设置或 `0`）。 |
 | `KWIN_ANDROID_ENABLE_EGL` | 未设置或 `0` 时跳过 EGL 后端，直接用 QPainter；脚本设为 `1`。 |
 | `KWIN_ANDROID_BUFFER_TYPE` | 向 termux-render 请求的 LorieBuffer 类型：`ahb` 或 `fd`；未设置时为 `fd`，脚本设为 `ahb`。 |
