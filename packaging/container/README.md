@@ -77,6 +77,20 @@ cp plasma-container-session.sh \
 
 ## Launching
 
+### One command (recommended)
+
+```sh
+start-plasma-container
+```
+
+This starts the native compositor (`start-plasma --compositor-only`), waits for
+the Wayland socket, then launches the container Plasma session. Overrides:
+`KWIN_ANDROID_GL_MODE` (default `zink`), `PLASMA_CONTAINER_DISTRO` (default
+`debian`), `PLASMA_CONTAINER_SESSION_SCRIPT` (default: the installed
+`plasma-container-session.sh`).
+
+### Manual (two steps)
+
 1. Native side — compositor only (no native Plasma shell):
 
    ```sh

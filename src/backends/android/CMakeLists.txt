@@ -18,6 +18,17 @@ install(PROGRAMS start-plasma.sh
     RENAME start-plasma
 )
 
+# One-command launcher for the GPU-accelerated container Plasma desktop, plus
+# the in-container session script it binds into the container.
+install(PROGRAMS start-plasma-container.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME start-plasma-container
+)
+
+install(PROGRAMS ${CMAKE_SOURCE_DIR}/packaging/container/plasma-container-session.sh
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/kwin/android
+)
+
 install(PROGRAMS android-rendering-env.sh
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     RENAME kwin-android-rendering-env
