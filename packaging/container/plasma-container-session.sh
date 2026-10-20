@@ -63,6 +63,47 @@ LOG="${PLASMA_CONTAINER_LOG:-$XDG_RUNTIME_DIR/plasma-container.log}"
 exec >"$LOG" 2>&1
 echo "=== Plasma container session (Vulkan RHI) $(date) ==="
 
+# --- Ensure required container packages ------------------------------------
+# apt-installable components are auto-installed if missing; a failed install
+# aborts the session. The Turnip Vulkan ICD is NOT apt-installable (it ships in
+# the mesa-for-android-container tarball), so it is only checked, not installed.
+ensure_container_deps() {
+    needed=""
+    command -v plasmashell  >/dev/null 2>&1 || needed="$needed plasma-workspace"
+    command -v dbus-launch  >/dev/null 2>&1 || needed="$needed dbus-x11"
+    # Unversioned Vulkan loader symlink that Qt's QLibrary("vulkan") dlopens.
+    if ! ls /usr/lib/*/libvulkan.so >/dev/null 2>&1 && [ ! -e /usr/lib/libvulkan.so ]; then
+        needed="$needed libvulkan-dev"
+    fi
+    # Qt Wayland platform plugin (QT_QPA_PLATFORM=wayland).
+    if ! ls /usr/lib/*/qt6/plugins/platforms/libqwayland*.so >/dev/null 2>&1; then
+        needed="$needed qt6-wayland"
+    fi
+
+    if [ -n "$needed" ]; then
+        echo "Installing missing container packages:$needed"
+        export DEBIAN_FRONTEND=noninteractive
+        if ! apt-get update; then
+            echo "ERROR: 'apt-get update' failed; cannot install:$needed" >&2
+            exit 1
+        fi
+        if ! apt-get install -y $needed; then
+            echo "ERROR: failed to install:$needed" >&2
+            exit 1
+        fi
+    fi
+
+    # Turnip Vulkan ICD (the GPU driver) -- from the mesa-for-android-container
+    # tarball, not apt. Without it there is no hardware Vulkan device.
+    if [ ! -r "$VK_ICD_FILENAMES" ]; then
+        echo "ERROR: Turnip Vulkan ICD not found: $VK_ICD_FILENAMES" >&2
+        echo "  Install the mesa-for-android-container tarball" >&2
+        echo "  (provides libvulkan_freedreno.so + the ICD json)." >&2
+        exit 1
+    fi
+}
+ensure_container_deps
+
 # --- D-Bus: the container runs its OWN session bus ------------------------
 # Joining the native compositor's bus over a bind-mounted socket does NOT work:
 # proot cannot forge SO_PEERCRED, so dbus's EXTERNAL auth against the native
@@ -78,13 +119,6 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
     dbus-update-activation-environment --systemd \
         WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
         QT_QPA_PLATFORM QSG_RHI_BACKEND VK_ICD_FILENAMES >/dev/null 2>&1 || true
-fi
-
-# --- Sanity: Vulkan loader symlink Qt needs -------------------------------
-if ! ls /usr/lib/*/libvulkan.so >/dev/null 2>&1 && [ ! -e /usr/lib/libvulkan.so ]; then
-    echo "WARNING: libvulkan.so (unversioned) not found."
-    echo "  Qt Vulkan RHI will fail to load the loader. Fix with:"
-    echo "    apt-get install -y libvulkan-dev"
 fi
 
 # --- KDE services, then the shell -----------------------------------------

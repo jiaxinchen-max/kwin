@@ -46,6 +46,11 @@ never a dma-buf; `vkcube` (Vulkan WSI) attaches dma-buf and renders correctly.
 
 ## One-time container setup
 
+The apt components below are **auto-installed on first launch** by
+`plasma-container-session.sh` (it installs `plasma-workspace`, `dbus-x11`,
+`libvulkan-dev` and `qt6-wayland` if missing, and aborts if that fails). You can
+also install them ahead of time:
+
 ```sh
 proot-distro login debian -- bash -c '
   apt-get update

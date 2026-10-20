@@ -41,9 +41,22 @@ if [ -z "$SESSION_SCRIPT" ] || [ ! -r "$SESSION_SCRIPT" ]; then
 fi
 
 command -v proot-distro >/dev/null 2>&1 || {
-    echo "Error: proot-distro not found (pkg install proot-distro)." >&2
-    exit 1
+    echo "proot-distro not found; installing it..."
+    if ! pkg install -y proot-distro; then
+        echo "Error: failed to install proot-distro." >&2
+        exit 1
+    fi
 }
+
+# Ensure the target distro is installed (a bare install still needs the Plasma
+# packages + mesa tarball; the container session script handles/checks those).
+if ! proot-distro login "$DISTRO" -- true >/dev/null 2>&1; then
+    echo "Container distro '$DISTRO' is not installed; installing it..."
+    if ! proot-distro install "$DISTRO"; then
+        echo "Error: failed to install proot-distro distro '$DISTRO'." >&2
+        exit 1
+    fi
+fi
 
 # 1) Native compositor (reuse an existing one if already up).
 if pgrep -x kwin_wayland >/dev/null 2>&1; then
