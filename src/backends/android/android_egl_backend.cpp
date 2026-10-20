@@ -871,17 +871,25 @@ AndroidEglBackend::~AndroidEglBackend()
 
 void AndroidEglBackend::exportDmaBufFeedback()
 {
-    // Advertise linux-dmabuf formats/modifiers to Wayland clients so external
-    // GL/Vulkan clients (e.g. Mesa Turnip apps in a proot container) can create
-    // dma-buf swapchains and share zero-copy buffers with this compositor.
-    //
-    // The generic EglBackend::initWayland() path cannot run here: it requires a
-    // DrmDevice (drmDevice()/scanoutDevice), which the Android backend does not
-    // have because KGSL exposes no DRM render node. Build the feedback directly
-    // from the EGL display's import formats. For the main device, prefer the
-    // driver's render node if it reports one, otherwise use the dev_t of the GPU
-    // device node (/dev/kgsl-3d0); a client rendering on the same KGSL/Turnip GPU
-    // sees the same node, so Mesa's Wayland WSI device matching lines up.
+    // Whether KWin advertises the standard linux-dmabuf feedback to Wayland
+    // clients - so external GL/Vulkan clients (e.g. Mesa Turnip apps in a proot
+    // container) can create dma-buf swapchains and share zero-copy buffers - is
+    // an explicit, launcher-controlled decision via KWIN_ANDROID_LINUX_DMABUF,
+    // not an auto-detected one. kwin-android-rendering-env sets it per GL mode
+    // (on for zink, off for system/llvmpipe). Keeping it explicit keeps the
+    // active buffer-sharing path easy to reason about and debug.
+    const QByteArray requested = qgetenv("KWIN_ANDROID_LINUX_DMABUF").toLower();
+    const bool enabled = requested == "on" || requested == "1" || requested == "true";
+    if (!enabled) {
+        if (!requested.isEmpty() && requested != "off" && requested != "0" && requested != "false") {
+            qCWarning(KWIN_ANDROID_EGL) << "Unsupported KWIN_ANDROID_LINUX_DMABUF value:" << requested
+                                        << "- expected on or off; treating as off";
+        }
+        qCInfo(KWIN_ANDROID_EGL) << "linux-dmabuf client advertising is off;"
+                                 << "set KWIN_ANDROID_LINUX_DMABUF=on to let external Wayland clients share dma-buf";
+        return;
+    }
+
     if (!WaylandServer::self()) {
         return;
     }
@@ -889,13 +897,24 @@ void AndroidEglBackend::exportDmaBufFeedback()
     if (!display) {
         return;
     }
-    // Only the Zink/Turnip path exposes EGL_EXT_image_dma_buf_import(_modifiers);
-    // in Android system GLES mode this is empty and clients use the AHardwareBuffer
-    // protocol instead, so there is nothing to advertise.
+
+    // The generic EglBackend::initWayland() path is not used here: the Android
+    // backend has no DrmDevice (KGSL exposes no DRM render node). Build the
+    // feedback directly from the EGL display's import formats. For the main
+    // device, prefer the driver's render node if it reports one, otherwise use
+    // the dev_t of the GPU device node (/dev/kgsl-3d0); a client rendering on the
+    // same KGSL/Turnip GPU sees the same node, so Mesa's Wayland WSI device
+    // matching lines up.
+    //
+    // KWIN_ANDROID_LINUX_DMABUF=on only makes sense with an EGL display that can
+    // import dma-buf (the Zink/Turnip path exposes EGL_EXT_image_dma_buf_import);
+    // Android system GLES cannot. Fail loudly rather than advertise a path the
+    // compositor cannot honour, consistent with the pinned-combination model.
     const auto &formats = display->nonExternalOnlySupportedDrmFormats();
     if (formats.isEmpty()) {
-        qCInfo(KWIN_ANDROID_EGL) << "EGL display exposes no dma-buf import formats;"
-                                 << "not advertising linux-dmabuf (needs the Zink/Turnip path)";
+        qCWarning(KWIN_ANDROID_EGL) << "KWIN_ANDROID_LINUX_DMABUF=on but the EGL display exposes no"
+                                    << "dma-buf import formats; the current renderer cannot import client"
+                                    << "dma-buf (use KWIN_ANDROID_GL_MODE=zink). Not advertising linux-dmabuf.";
         return;
     }
 

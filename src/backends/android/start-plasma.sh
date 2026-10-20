@@ -314,6 +314,7 @@ echo "  Vulkan ICD: ${VK_DRIVER_FILES:-${VK_ICD_FILENAMES:-Android system loader
 echo "  Output buffer import: $KWIN_ANDROID_AHB_IMPORT"
 echo "  Client buffer import: $KWIN_ANDROID_CLIENT_BUFFER_IMPORT"
 echo "  termux-render receive: $TERMUX_RENDER_AHB_RECEIVE"
+echo "  Client linux-dmabuf: $KWIN_ANDROID_LINUX_DMABUF"
 echo ""
 
 # 启动D-Bus
@@ -338,6 +339,7 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
         KDE_SESSION_VERSION \
         KWIN_BACKEND \
         KWIN_ANDROID_GL_MODE \
+        KWIN_ANDROID_LINUX_DMABUF \
         KWIN_WAYLAND_SOCKET \
         GALLIUM_DRIVER \
         MESA_LOADER_DRIVER_OVERRIDE \
