@@ -944,7 +944,10 @@ void AndroidEglBackend::exportDmaBufFeedback()
     LinuxDmaBufV1ClientBufferIntegration *dmabuf = waylandServer()->linuxDmabuf();
     dmabuf->setRenderBackend(this);
     dmabuf->setSupportedFormatsWithModifiers(tranches);
-    waylandServer()->setRenderBackend(this);
+    // Note: do NOT call waylandServer()->setRenderBackend() here. It sets up the
+    // DRM syncobj-timeline protocol and unconditionally dereferences
+    // backend->drmDevice(), which is null on the Android/KGSL backend (segfault).
+    // That protocol is DRM-only and irrelevant here; clients use implicit sync.
 
     qCInfo(KWIN_ANDROID_EGL) << "Advertised linux-dmabuf to clients:" << formats.count()
                              << "formats, main_device" << mainDevice;
