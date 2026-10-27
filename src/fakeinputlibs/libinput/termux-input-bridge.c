@@ -115,41 +115,42 @@ process_android_event(struct termux_input_bridge *bridge, const lorieEvent *even
         
     case EVENT_MOUSE:
         {
-            if (event->mouse.relative) {
-                /* Relative mouse motion */
-                libinput_event = create_pointer_event(
-                    libinput, device,
-                    LIBINPUT_EVENT_POINTER_MOTION,
-                    event->mouse.x, event->mouse.y
-                );
-            } else {
-                /* Absolute mouse motion */
-                libinput_event = create_pointer_event(
-                    libinput, device,
-                    LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE,
-                    event->mouse.x, event->mouse.y
-                );
-            }
-            
-            if (libinput_event) {
-                queue_event(libinput, libinput_event);
-            }
-            
-            /* Handle mouse button */
-            if (event->mouse.detail > 0) {
+            /* detail 0 = pointer motion, 1-3 = buttons (their x/y are not a position),
+             * 4 = wheel (x/y are scroll deltas). Only motion may move the pointer. */
+            if (event->mouse.detail == 0) {
+                if (event->mouse.relative) {
+                    /* Relative mouse motion */
+                    libinput_event = create_pointer_event(
+                        libinput, device,
+                        LIBINPUT_EVENT_POINTER_MOTION,
+                        event->mouse.x, event->mouse.y
+                    );
+                } else {
+                    /* Absolute mouse motion */
+                    libinput_event = create_pointer_event(
+                        libinput, device,
+                        LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE,
+                        event->mouse.x, event->mouse.y
+                    );
+                }
+
+                if (libinput_event) {
+                    queue_event(libinput, libinput_event);
+                }
+            } else if (event->mouse.detail >= 1 && event->mouse.detail <= 3) {
                 libinput_event = create_pointer_button_event(
                     libinput, device,
                     lorie_button_to_linux(event->mouse.detail),
                     event->mouse.down ? LIBINPUT_BUTTON_STATE_PRESSED : LIBINPUT_BUTTON_STATE_RELEASED
                 );
-                
+
                 if (libinput_event) {
                     queue_event(libinput, libinput_event);
                 }
             }
         }
         break;
-        
+
     case EVENT_TOUCH:
         {
             enum libinput_event_type touch_type;
