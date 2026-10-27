@@ -595,38 +595,39 @@ uint32_t libinput_event_pointer_get_seat_button_count(struct libinput_event_poin
 
 int libinput_event_pointer_has_axis(struct libinput_event_pointer *event, enum libinput_pointer_axis axis)
 {
-    (void)event; (void)axis;
-    return 0;
+    if (!event)
+        return 0;
+    return axis == LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL ? event->has_scroll_h : event->has_scroll_v;
 }
 
 double libinput_event_pointer_get_axis_value(struct libinput_event_pointer *event, enum libinput_pointer_axis axis)
 {
-    (void)event; (void)axis;
-    return 0.0;
+    return libinput_event_pointer_get_scroll_value(event, axis);
 }
 
 enum libinput_pointer_axis_source libinput_event_pointer_get_axis_source(struct libinput_event_pointer *event)
 {
-    (void)event;
-    return LIBINPUT_POINTER_AXIS_SOURCE_WHEEL;
+    return event && event->axis_source ? event->axis_source : LIBINPUT_POINTER_AXIS_SOURCE_WHEEL;
 }
 
 double libinput_event_pointer_get_axis_value_discrete(struct libinput_event_pointer *event, enum libinput_pointer_axis axis)
 {
-    (void)event; (void)axis;
-    return 0.0;
+    return libinput_event_pointer_get_scroll_value_v120(event, axis) / 120.0;
 }
 
 double libinput_event_pointer_get_scroll_value(struct libinput_event_pointer *event, enum libinput_pointer_axis axis)
 {
-    (void)event; (void)axis;
-    return 0.0;
+    if (!event)
+        return 0.0;
+    return axis == LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL ? event->scroll_h_value : event->scroll_v_value;
 }
 
 int32_t libinput_event_pointer_get_scroll_value_v120(struct libinput_event_pointer *event, enum libinput_pointer_axis axis)
 {
-    (void)event; (void)axis;
-    return 0;
+    if (!event)
+        return 0;
+    return (int32_t)(axis == LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL ? event->scroll_h_value_v120
+                                                                    : event->scroll_v_value_v120);
 }
 
 struct libinput_event *libinput_event_pointer_get_base_event(struct libinput_event_pointer *event)

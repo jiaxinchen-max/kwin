@@ -116,7 +116,8 @@ process_android_event(struct termux_input_bridge *bridge, const lorieEvent *even
     case EVENT_MOUSE:
         {
             /* detail 0 = pointer motion, 1-3 = buttons (their x/y are not a position),
-             * 4 = wheel (x/y are scroll deltas). Only motion may move the pointer. */
+             * 4 = wheel (x/y are scroll deltas in 1/120 notch units). Only motion may
+             * move the pointer. */
             if (event->mouse.detail == 0) {
                 if (event->mouse.relative) {
                     /* Relative mouse motion */
@@ -144,6 +145,12 @@ process_android_event(struct termux_input_bridge *bridge, const lorieEvent *even
                     event->mouse.down ? LIBINPUT_BUTTON_STATE_PRESSED : LIBINPUT_BUTTON_STATE_RELEASED
                 );
 
+                if (libinput_event) {
+                    queue_event(libinput, libinput_event);
+                }
+            } else if (event->mouse.detail == 4) {
+                libinput_event = create_pointer_scroll_event(
+                    libinput, device, event->mouse.x, event->mouse.y);
                 if (libinput_event) {
                     queue_event(libinput, libinput_event);
                 }
