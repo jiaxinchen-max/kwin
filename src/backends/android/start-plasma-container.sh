@@ -12,7 +12,7 @@
 #   PLASMA_CONTAINER_SESSION_SCRIPT path to the in-container session launcher
 #                                   (default: the installed plasma-container-session.sh)
 #   TURNIP_TARBALL_URL              Turnip (Adreno Vulkan) tarball to unpack into the container
-#                                   when its ICD is missing (default: the latest turnip_* asset
+#                                   when its ICD is missing (default: the latest mesa-for-android-container asset
 #                                   for the container's distro from lfdevs/mesa-for-android-container)
 #   PLASMA_CONTAINER_ROOTFS         the container's rootfs directory (default: auto-detected)
 set -u
@@ -67,7 +67,7 @@ fi
 # configuration (~/.curlrc, https_proxy) already work.
 ICD_REL="usr/share/vulkan/icd.d/freedreno_icd.aarch64.json"
 TURNIP_REPO="lfdevs/mesa-for-android-container"
-TURNIP_FALLBACK_TAG="turnip-27.0.0-devel-20261025"
+TURNIP_FALLBACK_TAG="mesa-27.0.0-devel-20261025"
 
 container_rootfs() {
     if [ -n "${PLASMA_CONTAINER_ROOTFS:-}" ]; then printf '%s\n' "$PLASMA_CONTAINER_ROOTFS"; return; fi
@@ -103,9 +103,9 @@ ensure_turnip_icd() {
             return 1
         }
         tag=$(curl -fsL -m 30 "https://api.github.com/repos/$TURNIP_REPO/releases?per_page=20" 2>/dev/null \
-              | sed -n 's/.*"tag_name": *"\(turnip-[^"]*\)".*/\1/p' | head -n1)
+              | sed -n 's/.*"tag_name": *"\(mesa-[^"]*\)".*/\1/p' | head -n1)
         tag="${tag:-$TURNIP_FALLBACK_TAG}"
-        url="https://github.com/$TURNIP_REPO/releases/download/$tag/turnip_${tag#turnip-}_${flavour}_arm64.tar.gz"
+        url="https://github.com/$TURNIP_REPO/releases/download/$tag/mesa-for-android-container_${tag#mesa-}_${flavour}_arm64.tar.gz"
     fi
 
     echo "Installing the Turnip Vulkan ICD into the container: $url"
