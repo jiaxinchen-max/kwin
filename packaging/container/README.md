@@ -62,7 +62,9 @@ proot-distro login debian -- bash -c '
 '
 ```
 
-The Turnip Vulkan ICD (`/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json` →
+`start-plasma-container` unpacks the Turnip tarball into the container automatically when the
+ICD is missing (host-side, so `~/.curlrc` / `https_proxy` apply); `TURNIP_TARBALL_URL` overrides the
+download. The Turnip Vulkan ICD (`/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json` →
 `libvulkan_freedreno.so`, KGSL-capable) comes from the mesa-for-android-container
 tarball, not from Debian's `mesa-vulkan-drivers` (whose Turnip has no KGSL
 backend). Verify with:
