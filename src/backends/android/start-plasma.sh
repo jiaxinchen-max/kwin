@@ -19,6 +19,9 @@ for arg in "$@"; do
             ;;
         --compositor-only|--container-session)
             COMPOSITOR_ONLY=1
+            # Container clients are proot processes KWin cannot match to a desktop file; its
+            # executable-path authorisation of privileged protocols would deny them all.
+            export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
             ;;
         -verbose|--verbose)
             VERBOSE_LOG=1

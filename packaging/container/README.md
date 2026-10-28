@@ -24,6 +24,14 @@ container and talk to the compositor over the **shared Wayland socket**
 management still works over Wayland (`plasma-window-management`); only
 `org.kde.KWin` D-Bus scripting is unavailable across the split.
 
+## Container Plasma version
+
+Use a container whose Plasma is close to the native KWin (6.6): **Debian forky/sid (Plasma 6.7)**, e.g.
+`proot-distro install -n plasma debian:forky`. Debian trixie's Plasma 6.3 black-screens against this
+KWin (`interface 'kde_output_device_mode_v2' has no event 4`, `kscreen.kwayland: Connection to Wayland
+server timed out`). `start-plasma-container` sets `KWIN_WAYLAND_NO_PERMISSION_CHECKS=1` because KWin
+authorises privileged protocols by the client's executable path, which for proot clients is proot's loader.
+
 ## Why Vulkan RHI (the black-screen fix)
 
 Container Qt/QtQuick apps black-screened under the default OpenGL path. Root

@@ -84,6 +84,8 @@ turnip_asset_flavour() {
     id=$(sed -n 's/^ID=//p' "$rootfs/etc/os-release" 2>/dev/null | tr -d '"' | head -n1)
     codename=$(sed -n 's/^VERSION_CODENAME=//p' "$rootfs/etc/os-release" 2>/dev/null | tr -d '"' | head -n1)
     [ -n "$id" ] && [ -n "$codename" ] || return 1
+    # Turnip tarballs are published per stable release; forky/sid use the newest Debian one.
+    case "$id:$codename" in debian:forky|debian:sid|debian:testing) codename=trixie ;; esac
     printf '%s_%s\n' "$id" "$codename"
 }
 
@@ -131,7 +133,10 @@ if pgrep -x kwin_wayland >/dev/null 2>&1; then
     echo "kwin_wayland already running; reusing it."
 else
     echo "Starting native compositor (start-plasma --compositor-only, GL=$GL_MODE)..."
-    setsid env KWIN_ANDROID_GL_MODE="$GL_MODE" start-plasma --compositor-only \
+    # Container clients are proot processes KWin cannot match to a desktop file, so its
+    # executable-path authorisation of privileged protocols would deny them all.
+    setsid env KWIN_ANDROID_GL_MODE="$GL_MODE" KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 \
+        start-plasma --compositor-only \
         </dev/null >/dev/null 2>&1 &
 fi
 
