@@ -20,6 +20,8 @@
 #include <chrono>
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
@@ -47,15 +49,36 @@ static int requestedLorieBufferType()
     return LORIEBUFFER_FD;
 }
 
+// Event trace for diagnosing input problems: create ~/.termux/kwin-input-debug before starting the
+// desktop and every mouse/touch event the display app sends is written to stderr (the desktop log).
+static bool inputDebugEnabled()
+{
+    static const bool enabled = [] {
+        const char *home = std::getenv("HOME");
+        if (!home) {
+            return false;
+        }
+        char path[512];
+        if (std::snprintf(path, sizeof(path), "%s/.termux/kwin-input-debug", home) >= static_cast<int>(sizeof(path))) {
+            return false;
+        }
+        return access(path, F_OK) == 0;
+    }();
+    return enabled;
+}
+
 static uint32_t lorieButtonToLinux(uint8_t detail)
 {
+    // The display app numbers buttons like X11 (and its InputStub): 1 left, 2 middle, 3 right.
+    // A two-finger tap arrives as 3, so it must become BTN_RIGHT (it used to become BTN_MIDDLE and
+    // Plasma never showed its context menu).
     switch (detail) {
     case 1:
         return BTN_LEFT;
     case 2:
-        return BTN_RIGHT;
-    case 3:
         return BTN_MIDDLE;
+    case 3:
+        return BTN_RIGHT;
     default:
         return detail;
     }
@@ -446,6 +469,12 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         
         const auto &touch = e.touch;
         const QPointF pos(touch.x, touch.y);
+        if (inputDebugEnabled()) {
+            std::fprintf(stderr, "android-input: touch type=%u id=%u x=%u y=%u\n",
+                         static_cast<unsigned>(touch.type), static_cast<unsigned>(touch.id),
+                         static_cast<unsigned>(touch.x), static_cast<unsigned>(touch.y));
+            std::fflush(stderr);
+        }
         
         switch (touch.type) {
         case 0: // Down
@@ -468,11 +497,42 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         const auto &mouse = e.mouse;
         const QPointF pos(mouse.x, mouse.y);
         const auto time = currentInputTime();
-        
-        if (mouse.relative) {
+        if (inputDebugEnabled()) {
+            std::fprintf(stderr, "android-input: mouse detail=%u x=%g y=%g down=%u relative=%u\n",
+                         static_cast<unsigned>(mouse.detail), static_cast<double>(mouse.x),
+                         static_cast<double>(mouse.y), static_cast<unsigned>(mouse.down),
+                         static_cast<unsigned>(mouse.relative));
+            std::fflush(stderr);
+        }
+
+        // detail 4 is the wheel: x/y are scroll deltas in 1/120 notch units (positive = down/right),
+        // not a position. Treating them as motion pushed the pointer around instead of scrolling.
+        if (mouse.detail == 4) {
+            const struct {
+                PointerAxis axis;
+                float v120;
+            } axes[] = {{PointerAxis::Horizontal, mouse.x}, {PointerAxis::Vertical, mouse.y}};
+            bool any = false;
+            for (const auto &a : axes) {
+                if (a.v120 == 0.0f) {
+                    continue;
+                }
+                Q_EMIT m_pointerDevice->pointerAxisChanged(a.axis, a.v120 / 120.0 * 15.0,
+                                                           qRound(a.v120), PointerAxisSource::Wheel,
+                                                           false, time, m_pointerDevice);
+                any = true;
+            }
+            if (any) {
+                Q_EMIT m_pointerDevice->pointerFrame(m_pointerDevice);
+            }
+            break;
+        }
+
+        // Button events (detail 1-3) do not carry a position either: their x/y are not a location.
+        if (mouse.detail == 0 && mouse.relative) {
             QPointF delta(mouse.x, mouse.y);
             Q_EMIT m_pointerDevice->pointerMotion(delta, delta, time, m_pointerDevice);
-        } else {
+        } else if (mouse.detail == 0) {
             Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, time, m_pointerDevice);
         }
         
