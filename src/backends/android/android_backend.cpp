@@ -15,6 +15,7 @@
 #include "keyboard_input.h"
 #include "xkb.h"
 
+#include <QSet>
 #include <QSocketNotifier>
 #include <algorithm>
 #include <chrono>
@@ -476,16 +477,36 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
             std::fflush(stderr);
         }
         
+        // The display app sends X11 XInput2 touch types: 18 TouchBegin, 19 TouchUpdate, 20 TouchEnd.
+        // (0/1/2 were never sent, so every touch used to be dropped.) It also sends a TouchEnd for
+        // every one of its ten slots that is not pressed on each move, so only end a touch that began,
+        // and start one that was not yet down when its first update arrives.
+        static QSet<int> activeTouches;
+        const int touchId = touch.id;
         switch (touch.type) {
-        case 0: // Down
-            Q_EMIT m_touchDevice->touchDown(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+        case 18: // TouchBegin
+        case 0:
+            activeTouches.insert(touchId);
+            Q_EMIT m_touchDevice->touchDown(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
             break;
-        case 1: // Up
-            Q_EMIT m_touchDevice->touchUp(touch.id, std::chrono::milliseconds(0), m_touchDevice);
+        case 19: // TouchUpdate
+        case 2:
+            if (!activeTouches.contains(touchId)) {
+                activeTouches.insert(touchId);
+                Q_EMIT m_touchDevice->touchDown(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
+            } else {
+                Q_EMIT m_touchDevice->touchMotion(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
+            }
             break;
-        case 2: // Motion
-            Q_EMIT m_touchDevice->touchMotion(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+        case 20: // TouchEnd
+        case 1:
+            if (!activeTouches.remove(touchId)) {
+                return;
+            }
+            Q_EMIT m_touchDevice->touchUp(touchId, std::chrono::milliseconds(0), m_touchDevice);
             break;
+        default:
+            return;
         }
         Q_EMIT m_touchDevice->touchFrame(m_touchDevice);
         break;
