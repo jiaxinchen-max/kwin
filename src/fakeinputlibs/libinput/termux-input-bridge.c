@@ -28,13 +28,15 @@ static void process_android_event(struct termux_input_bridge *bridge, const lori
 
 static uint32_t lorie_button_to_linux(uint8_t detail)
 {
+    /* The display app numbers buttons like X11 (and like its InputStub): 1 left, 2 middle, 3 right.
+     * Two-finger taps send 3 and three-finger taps send 2, so mapping 2 to right swapped them. */
     switch (detail) {
     case 1:
         return BTN_LEFT;
     case 2:
-        return BTN_RIGHT;
-    case 3:
         return BTN_MIDDLE;
+    case 3:
+        return BTN_RIGHT;
     default:
         return detail;
     }
