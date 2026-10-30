@@ -207,6 +207,7 @@ AndroidBackend::AndroidBackend(QObject *parent)
 
 AndroidBackend::~AndroidBackend()
 {
+    cancelNativeTouches();
     if (m_inputNotifier) {
         delete m_inputNotifier;
     }
@@ -375,8 +376,8 @@ std::unique_ptr<EglBackend> AndroidBackend::createOpenGLBackend()
 
 std::unique_ptr<QPainterBackend> AndroidBackend::createQPainterBackend()
 {
-    qInfo() << "Creating Android QPainter backend";
-    return std::make_unique<AndroidQPainterBackend>(this);
+    qCritical() << "Android QPainter mode is not supported; specify system, zink or llvmpipe EGL rendering";
+    return nullptr;
 }
 
 EglDisplay *AndroidBackend::sceneEglDisplayObject() const
@@ -388,7 +389,6 @@ QList<CompositingType> AndroidBackend::supportedCompositors() const
 {
     QList<CompositingType> compositors;
     compositors.append(OpenGLCompositing);
-    compositors.append(QPainterCompositing);
     return compositors;
 }
 
@@ -409,8 +409,20 @@ QString AndroidBackend::supportInformation() const
     return support;
 }
 
+void AndroidBackend::cancelNativeTouches()
+{
+    if (m_activeTouches.isEmpty()) {
+        return;
+    }
+    m_activeTouches.clear();
+    if (m_touchDevice) {
+        Q_EMIT m_touchDevice->touchCanceled(m_touchDevice);
+    }
+}
+
 void AndroidBackend::handleInputEvents()
 {
+    bool disconnected = false;
     char buffer[sizeof(lorieEvent) * 16];
     while (true) {
         const ssize_t bytesRead = read(m_connFd, buffer, sizeof(buffer));
@@ -418,14 +430,16 @@ void AndroidBackend::handleInputEvents()
             m_inputBuffer.append(buffer, static_cast<qsizetype>(bytesRead));
         } else if (bytesRead == 0) {
             qWarning() << "Android input connection closed";
-            return;
+            disconnected = true;
+            break;
         } else if (errno == EINTR) {
             continue;
         } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             break;
         } else {
             qWarning() << "Failed to read Android input event:" << strerror(errno);
-            return;
+            disconnected = true;
+            break;
         }
     }
 
@@ -460,20 +474,30 @@ void AndroidBackend::handleInputEvents()
             break;
         }
     }
+    if (disconnected) {
+        if (m_inputNotifier) {
+            m_inputNotifier->setEnabled(false);
+        }
+        m_inputBuffer.clear();
+        m_inputBytesToDiscard = 0;
+        cancelNativeTouches();
+    }
 }
 
 void AndroidBackend::processInputEvent(const lorieEvent &e)
 {
     switch (e.type) {
     case EVENT_TOUCH: {
-        if (!m_touchDevice) break;
+        if (!m_touchDevice || !m_touchDevice->isEnabled()) break;
         
         const auto &touch = e.touch;
         const QPointF pos(touch.x, touch.y);
+        const auto time = currentInputTime();
         if (inputDebugEnabled()) {
-            std::fprintf(stderr, "android-input: touch type=%u id=%u x=%u y=%u\n",
+            std::fprintf(stderr, "android-input: touch type=%u id=%u x=%u y=%u time_us=%lld\n",
                          static_cast<unsigned>(touch.type), static_cast<unsigned>(touch.id),
-                         static_cast<unsigned>(touch.x), static_cast<unsigned>(touch.y));
+                         static_cast<unsigned>(touch.x), static_cast<unsigned>(touch.y),
+                         static_cast<long long>(time.count()));
             std::fflush(stderr);
         }
         
@@ -481,29 +505,28 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         // (0/1/2 were never sent, so every touch used to be dropped.) It also sends a TouchEnd for
         // every one of its ten slots that is not pressed on each move, so only end a touch that began,
         // and start one that was not yet down when its first update arrives.
-        static QSet<int> activeTouches;
         const int touchId = touch.id;
         switch (touch.type) {
         case 18: // TouchBegin
         case 0:
-            activeTouches.insert(touchId);
-            Q_EMIT m_touchDevice->touchDown(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
+            m_activeTouches.insert(touchId);
+            Q_EMIT m_touchDevice->touchDown(touchId, pos, time, m_touchDevice);
             break;
         case 19: // TouchUpdate
         case 2:
-            if (!activeTouches.contains(touchId)) {
-                activeTouches.insert(touchId);
-                Q_EMIT m_touchDevice->touchDown(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
+            if (!m_activeTouches.contains(touchId)) {
+                m_activeTouches.insert(touchId);
+                Q_EMIT m_touchDevice->touchDown(touchId, pos, time, m_touchDevice);
             } else {
-                Q_EMIT m_touchDevice->touchMotion(touchId, pos, std::chrono::milliseconds(0), m_touchDevice);
+                Q_EMIT m_touchDevice->touchMotion(touchId, pos, time, m_touchDevice);
             }
             break;
         case 20: // TouchEnd
         case 1:
-            if (!activeTouches.remove(touchId)) {
+            if (!m_activeTouches.remove(touchId)) {
                 return;
             }
-            Q_EMIT m_touchDevice->touchUp(touchId, std::chrono::milliseconds(0), m_touchDevice);
+            Q_EMIT m_touchDevice->touchUp(touchId, time, m_touchDevice);
             break;
         default:
             return;
@@ -644,6 +667,9 @@ bool AndroidInputDevice::isEnabled() const
 
 void AndroidInputDevice::setEnabled(bool enabled)
 {
+    if (!enabled && m_type == Type::Touch) {
+        m_backend->cancelNativeTouches();
+    }
     m_enabled = enabled;
 }
 

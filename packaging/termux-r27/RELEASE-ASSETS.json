@@ -1,0 +1,123 @@
+[
+  {
+    "name": "gl4es_1.1.7.20260927_aarch64.deb",
+    "size": 389112,
+    "sha256": "eb0ba70d084c87b84b144ef2ce6ad415ca3810dcb356d77e4e8cefe962157913",
+    "pkg": "gl4es",
+    "version": "1.1.7.20260927",
+    "architecture": "aarch64",
+    "depends": "libx11, libxcb"
+  },
+  {
+    "name": "kwin_6.6.0-27_aarch64.deb",
+    "size": 9565272,
+    "sha256": "b5c4ccd7983849eea8008cb5d61740c90ab834d3fa23730385e0a01dafe8ecf3",
+    "pkg": "kwin",
+    "version": "6.6.0-27",
+    "architecture": "aarch64",
+    "depends": "aurorae, breeze, kf6-kauth, kf6-kcmutils, kf6-kcolorscheme, kf6-kconfig, kf6-kcoreaddons, kf6-kcrash, kf6-kdeclarative, kdecoration, kf6-kglobalaccel, kglobalacceld, kf6-kguiaddons, kf6-ki18n, kf6-kidletime, kf6-kirigami, kf6-kitemmodels, kf6-knewstuff, kf6-knotifications, kf6-kpackage, kf6-kservice, kf6-ksvg, kf6-kwidgetsaddons, kf6-kwindowsystem, kf6-kxmlgui, knighttime, libc++, libcanberra, libdisplay-info, libdrm, libepoxy (>= 1.5.10-6), libplasma, libqaccessibilityclient-qt6, libwayland, libx11, libxcb, libxi, libxkbcommon, littlecms, mesa, plasma-activities, qt6-qt5compat, qt6-qtbase (= 6.12.0-1+termuxkwin1), qt6-qtdeclarative, qt6-qtsensors, qt6-qtsvg, qt6-qttools, qt6-qtwayland, xcb-util-cursor, xcb-util-keysyms, xcb-util-wm, libxcvt, kwayland, libandroid-stub (>= 30-1)"
+  },
+  {
+    "name": "libandroid-stub_30-1_aarch64.deb",
+    "size": 26644,
+    "sha256": "5b392496146309b8454780821591dccb7e6a7050f8789f3bc97b4bb6c2b6bc67",
+    "pkg": "libandroid-stub",
+    "version": "30-1",
+    "architecture": "aarch64",
+    "depends": ""
+  },
+  {
+    "name": "libepoxy_1.5.10-6_aarch64.deb",
+    "size": 299448,
+    "sha256": "c78f1674337e4a90a9c933d6301d058bf2be85bc926baae6202320e803582d83",
+    "pkg": "libepoxy",
+    "version": "1.5.10-6",
+    "architecture": "aarch64",
+    "depends": "opengl"
+  },
+  {
+    "name": "qt6-qtbase-cross-tools_6.12.0-1+termuxkwin1_all.deb",
+    "size": 15368512,
+    "sha256": "07b9a9ae857225a814e85c74fdc613cc0720c328d3b2f4f5270a47b67169bf5f",
+    "pkg": "qt6-qtbase-cross-tools",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "all",
+    "depends": "qt6-qtbase (= 6.12.0-1+termuxkwin1)"
+  },
+  {
+    "name": "qt6-qtbase-gtk-platformtheme_6.12.0-1+termuxkwin1_aarch64.deb",
+    "size": 55448,
+    "sha256": "c682bf46ff7251449f41c420fe7818b2ff4f91a21477266fc458bf7d86795bb5",
+    "pkg": "qt6-qtbase-gtk-platformtheme",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "aarch64",
+    "depends": "gdk-pixbuf, gtk3, pango, qt6-qtbase (= 6.12.0-1+termuxkwin1)"
+  },
+  {
+    "name": "qt6-qtbase_6.12.0-1+termuxkwin1_aarch64.deb",
+    "size": 13163324,
+    "sha256": "5b1507ff7c945c284e9230138752ccf2b63119cf03c4d782714aa8b3a6e91262",
+    "pkg": "qt6-qtbase",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "aarch64",
+    "depends": "brotli, double-conversion, freetype, glib, harfbuzz, krb5, libandroid-posix-semaphore, libandroid-shmem, libc++, libdrm, libglvnd-dev, libice, libicu, libjpeg-turbo, libpng, libsm, libsqlite, libuuid, libx11, libxcb, libxi, libxkbcommon, libwayland, opengl, openssl, pcre2, vulkan-loader, xcb-util-cursor, xcb-util-image, xcb-util-keysyms, xcb-util-renderutil, xcb-util-wm, xdg-utils, zlib, zstd"
+  },
+  {
+    "name": "termux-render_0.1.0-1_aarch64.deb",
+    "size": 3522740,
+    "sha256": "4dc75a1aed887a59790f03a8c76948de514678fd7c8a00fb04fbc2975a0ac0d6",
+    "pkg": "termux-render",
+    "version": "0.1.0-1",
+    "architecture": "aarch64",
+    "depends": ""
+  },
+  {
+    "name": "xwayland_24.1.11-1_aarch64.deb",
+    "size": 695528,
+    "sha256": "3cc2999ae0ba90495abad71445f794723efc06a97c001b383467665e3038e8a4",
+    "pkg": "xwayland",
+    "version": "24.1.11-1",
+    "architecture": "aarch64",
+    "depends": "libandroid-shmem, libdrm, libepoxy (>= 1.5.10-6), libpciaccess, libpixman, libwayland, libwayland-protocols, libx11, libxau, libxcvt, libxfont2, libxinerama, libxkbfile, libxshmfence, opengl, openssl, xkeyboard-config, xorg-protocol-txt, xorg-xkbcomp"
+  },
+  {
+    "name": "kde-config-updates_6.7.4-3+termuxfix4_arm64.deb",
+    "sha256": "0f5b98ef4efc1e09d358c71874d8e4fa5c88ef27024adca3111bae6eca98b252",
+    "pkg": "kde-config-updates",
+    "version": "6.7.4-3+termuxfix4",
+    "architecture": "arm64",
+    "depends": "systemsettings, plasma-version-base-6.7, libc6 (>= 2.17), libkf6configcore6 (>= 6.26.0~), libkf6configgui6 (>= 6.26.0~), libkf6coreaddons6 (>= 6.26.0~), libkf6kcmutilscore6 (>= 6.26.0~), libkf6kcmutilsquick6 (>= 6.26.0~), libqt6core6t64 (>= 6.11.2), libqt6qml6 (>= 6.10.0~), libstdc++6 (>= 5)",
+    "size": 25064,
+    "target": "debian-forky-plasma-container-only"
+  },
+  {
+    "name": "plasma-discover-backend-fwupd_6.7.4-3+termuxfix4_arm64.deb",
+    "sha256": "9d0a50cc0eeb9883e4b304961e01d6bf3124028397f8d971856808bac1e752b1",
+    "pkg": "plasma-discover-backend-fwupd",
+    "version": "6.7.4-3+termuxfix4",
+    "architecture": "arm64",
+    "depends": "plasma-discover (= 6.7.4-3+termuxfix4), plasma-version-base-6.7, libc6 (>= 2.32), libfwupd3 (>= 2.0.0), libglib2.0-0t64 (>= 2.22.0), libkf6i18n6 (>= 6.26.0~), libqt6core6t64 (>= 6.11.2), libqt6gui6 (>= 6.10.0~), libqt6network6 (>= 6.10.0~), libstdc++6 (>= 5)",
+    "size": 42964,
+    "target": "debian-forky-plasma-container-only"
+  },
+  {
+    "name": "plasma-discover-common_6.7.4-3+termuxfix4_all.deb",
+    "sha256": "784d84b23591de1f3eb4c480b2d39cd0d402f0460826d0ee5d40ec6760f9406f",
+    "pkg": "plasma-discover-common",
+    "version": "6.7.4-3+termuxfix4",
+    "architecture": "all",
+    "depends": "plasma-version-base-6.7",
+    "size": 559920,
+    "target": "debian-forky-plasma-container-only"
+  },
+  {
+    "name": "plasma-discover_6.7.4-3+termuxfix4_arm64.deb",
+    "sha256": "cb0d2e75cd6aac5f59fe0bf3be7ffb460ba734576c9a6cc74f055ce1ffa37f22",
+    "pkg": "plasma-discover",
+    "version": "6.7.4-3+termuxfix4",
+    "architecture": "arm64",
+    "depends": "appstream (>= 1.0), apt-config-icons, packagekit (>= 1.0), plasma-discover-common (= 6.7.4-3+termuxfix4), plasma-version-base-6.7, qml6-module-org-kde-config, qml6-module-org-kde-kcmutils, qml6-module-org-kde-kirigami, qml6-module-org-kde-kirigamiaddons-components, qml6-module-org-kde-kirigamiaddons-formcard, qml6-module-org-kde-kitemmodels, qml6-module-org-kde-purpose, qml6-module-org-kde-userfeedback, qml6-module-qt5compat-graphicaleffects, qml6-module-qtnetwork, qml6-module-qtqml, qml6-module-qtqml-models, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-templates, qml6-module-qtwebview, kio6, libappstreamqt3 (>= 1.2.1), libc6 (>= 2.34), libgcc-s1 (>= 3.0), libkf6attica6 (>= 6.26.0~), libkf6configcore6 (>= 6.26.0~), libkf6configgui6 (>= 6.26.0~), libkf6coreaddons6 (>= 6.26.0~), libkf6crash6 (>= 6.26.0~), libkf6dbusaddons6 (>= 6.26.0~), libkf6i18n6 (>= 6.26.0~), libkf6i18nqml6 (>= 6.26.0~), libkf6iconthemes6 (>= 6.26.0~), libkf6idletime6 (>= 6.26.0~), libkf6jobwidgets6 (>= 6.0.0), libkf6kiocore6 (>= 6.26.0~), libkf6kiogui6 (>= 6.26.0~), libkf6newstuffcore6 (>= 6.26.0~), libkf6notifications6 (>= 6.26.0~), libkf6service-bin, libkf6service6 (>= 6.0.0), libkf6statusnotifieritem6 (>= 6.26.0~), libkf6widgetsaddons6 (>= 6.0.0), libkf6windowsystem6 (>= 6.0.0), libkirigamiapp6 (>= 1.11.0), libmarkdown2 (>= 2.0.6), libpackagekitqt6-2 (>= 1.1.4), libqcoro6core0t64 (>= 0.4.0), libqt6concurrent6 (>= 6.10.0~), libqt6core6t64 (>= 6.11.2), libqt6dbus6 (>= 6.10.0~), libqt6gui6 (>= 6.11.2), libqt6network6 (>= 6.10.0~), libqt6qml6 (>= 6.10.0~), libqt6quick6 (>= 6.10.0~), libqt6webview6 (>= 6.6.1), libqt6widgets6 (>= 6.10.0~), libstdc++6 (>= 11)",
+    "size": 685592,
+    "target": "debian-forky-plasma-container-only"
+  }
+]

@@ -115,12 +115,12 @@ public:
     
     // Renderer as resolved by kwin-android-rendering-env. The script leaves
     // KWIN_ANDROID_GL_MODE set to system, zink or llvmpipe; anything else is
-    // an unresolved request and yields Fallback.
+    // an unresolved request and yields Invalid.
     enum class RenderingMode {
         SystemGlesHardware, // Android system EGL/GLES
         ZinkHardware,      // Mesa Zink on a Vulkan ICD
         LlvmpipeSoftware,  // Mesa llvmpipe software rendering
-        Fallback           // No usable EGL renderer
+        Invalid           // No usable EGL renderer
     };
 
     static RenderingMode renderingModeFromEnvironment();
@@ -131,14 +131,14 @@ public:
 
 private:
     bool initializeEgl();
-    void exportDmaBufFeedback();
+    bool exportDmaBufFeedback();
     void addOutput(BackendOutput *output);
 
     AndroidBackend *const m_backend;
     QList<AndroidEglLayer *> m_layers;
     
     bool m_eglAvailable = false;
-    RenderingMode m_renderingMode = RenderingMode::Fallback;
+    RenderingMode m_renderingMode = RenderingMode::Invalid;
 };
 
 } // namespace Android

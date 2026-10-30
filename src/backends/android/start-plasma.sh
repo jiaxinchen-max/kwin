@@ -123,16 +123,16 @@ trap 'exit 143' TERM
 if command -v pgrep >/dev/null 2>&1; then
     EXISTING_KWIN_PID="$(pgrep -x kwin_wayland | head -n 1 || true)"
     if [ -n "$EXISTING_KWIN_PID" ]; then
-        echo "Plasma is already running (kwin_wayland pid $EXISTING_KWIN_PID)."
-        exit 0
+        echo "Error: requested KWin session conflicts with existing kwin_wayland pid $EXISTING_KWIN_PID; refusing to reuse or stop it." >&2
+        exit 73
     fi
 fi
 
 KWIN_SOCKET_PATH="$XDG_RUNTIME_DIR/$KWIN_WAYLAND_SOCKET"
 if [ -S "$KWIN_SOCKET_PATH" ]; then
     if command -v pgrep >/dev/null 2>&1 && pgrep -x kwin_wayland >/dev/null 2>&1; then
-        echo "Plasma is already running on $KWIN_WAYLAND_SOCKET."
-        exit 0
+        echo "Error: requested KWin session conflicts with an existing kwin_wayland on $KWIN_WAYLAND_SOCKET; refusing to reuse or stop it." >&2
+        exit 73
     fi
     echo "Removing stale Wayland socket: $KWIN_SOCKET_PATH"
     rm -f "$KWIN_SOCKET_PATH" "$KWIN_SOCKET_PATH.lock"
@@ -149,7 +149,7 @@ else
     exec > "$PLASMA_LOG" 2>&1
 fi
 
-echo "=== Plasma Desktop with Hardware Accelerated KWin ==="
+echo "=== Plasma Desktop with Explicit KWin Renderer ==="
 echo "Logging to: $PLASMA_LOG"
 
 # 检查Termux环境
@@ -385,7 +385,7 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
 fi
 
 # 启动KWin Wayland
-echo "Starting KWin with hardware acceleration..."
+echo "Starting KWin with requested renderer: $KWIN_ANDROID_GL_MODE"
 kwin_wayland \
     --socket "$KWIN_WAYLAND_SOCKET" \
     --xwayland \
@@ -412,6 +412,18 @@ if [ "$KWIN_READY" != "1" ]; then
     exit 1
 fi
 export WAYLAND_DISPLAY="$KWIN_WAYLAND_SOCKET"
+if [ "$COMPOSITOR_ONLY" != "1" ]; then
+    kwin_android_configure_qt_clients
+    QT_CLIENT_PROBE="$PREFIX/bin/kwin-qt-client-renderer-probe"
+    if [ ! -x "$QT_CLIENT_PROBE" ]; then
+        echo "Error: required native Qt client renderer probe is unavailable: $QT_CLIENT_PROBE" >&2
+        exit 1
+    fi
+    if ! "$QT_CLIENT_PROBE"; then
+        echo "Error: native Qt client renderer does not match requested $KWIN_ANDROID_GL_MODE mode" >&2
+        exit 1
+    fi
+fi
 
 # KWin creates the lazy XWayland listening socket before spawning Xwayland.
 # Export its display so Plasma children and compatibility clients use the same
@@ -441,7 +453,14 @@ KWIN_ANDROID_SESSION_ENV="${KWIN_ANDROID_SESSION_ENV:-$KWIN_ANDROID_RUNTIME_ROOT
 chmod 0600 "$KWIN_ANDROID_SESSION_ENV" 2>/dev/null || true
 
 if command -v dbus-update-activation-environment >/dev/null 2>&1; then
-    dbus-update-activation-environment DISPLAY TMPDIR WAYLAND_DISPLAY XDG_RUNTIME_DIR || true
+    CLIENT_DBUS_ENV=(DISPLAY TMPDIR WAYLAND_DISPLAY XDG_RUNTIME_DIR)
+    if [ "$COMPOSITOR_ONLY" != "1" ]; then
+        CLIENT_DBUS_ENV+=("${KWIN_ANDROID_QT_CLIENT_ENV_VARS[@]}")
+    fi
+    if ! dbus-update-activation-environment "${CLIENT_DBUS_ENV[@]}"; then
+        echo "Error: failed to publish the explicit desktop renderer environment to D-Bus" >&2
+        exit 1
+    fi
 fi
 
 # 启动Plasma组件
@@ -512,9 +531,9 @@ else
 fi
 
 echo ""
-echo "✓ Plasma Desktop started with hardware accelerated KWin"
+echo "✓ Plasma Desktop started with requested KWin renderer"
 echo "✓ Acceleration mode: $ACCELERATION_MODE"
-echo "✓ AHardwareBuffer zero-copy rendering supported"
+echo "✓ Output buffer import: $KWIN_ANDROID_AHB_IMPORT"
 echo ""
 echo "Launch applications:"
 echo "  konsole    # Terminal"

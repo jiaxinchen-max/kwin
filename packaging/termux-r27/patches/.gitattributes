@@ -1,0 +1,2 @@
+# Preserve exact unified-diff context whitespace for verified patch inputs.
+*.patch -whitespace

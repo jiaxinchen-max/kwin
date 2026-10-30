@@ -59,24 +59,6 @@ kwin_android_use_llvmpipe()
     unset VK_DRIVER_FILES VK_ICD_FILENAMES WRAPPER_VULKAN_PATH MESA_VK_WSI_DEBUG
 }
 
-kwin_android_find_turnip_icd()
-{
-    local arch candidate
-
-    arch="${1:-$(uname -m)}"
-    for candidate in \
-        "${KWIN_ANDROID_TURNIP_ICD:-}" \
-        "$PREFIX/share/vulkan/icd.d/freedreno_icd.${arch}.json" \
-        "$PREFIX/share/vulkan/icd.d/freedreno_icd.aarch64.json" \
-        "$PREFIX/share/vulkan/icd.d/freedreno_icd.arm64.json"; do
-        if [ -n "$candidate" ] && [ -r "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    done
-    return 1
-}
-
 kwin_android_probe_zink_icd()
 {
     local icd="$1"
@@ -84,10 +66,6 @@ kwin_android_probe_zink_icd()
     local expected_renderer="${3:-}"
     local output
     local -a probe_command
-
-    if [ "${KWIN_ANDROID_DISABLE_RENDERER_PROBE:-0}" = "1" ]; then
-        return 0
-    fi
 
     if command -v eglinfo >/dev/null 2>&1; then
         probe_command=(eglinfo -p surfaceless -B)
@@ -130,9 +108,11 @@ kwin_android_probe_zink_icd()
         if [ -n "$expected_renderer" ]; then
             printf '%s\n' "$output" | grep -Eqi "$expected_renderer" || return 1
         fi
+        return 0
     fi
 
-    return 0
+    echo "Cannot validate requested Zink mode: eglinfo or vulkaninfo is required" >&2
+    return 1
 }
 
 kwin_android_configure_icd_zink()
@@ -165,126 +145,132 @@ kwin_android_configure_wrapper_zink()
 
 kwin_android_select_rendering()
 {
-    local arch mode wrapper_icd wrapper_lib android_vulkan android_egl android_gles
-    local loader_path requested_icd turnip_icd kgsl_device
+    local arch mode wrapper_icd wrapper_lib android_vulkan requested_icd
 
     arch="$(uname -m)"
-    mode="${KWIN_ANDROID_GL_MODE:-auto}"
+    mode="${KWIN_ANDROID_GL_MODE:-}"
     mode="$(printf '%s' "$mode" | tr '[:upper:]' '[:lower:]')"
     wrapper_icd="${KWIN_ANDROID_WRAPPER_ICD:-$PREFIX/share/vulkan/icd.d/wrapper_icd.${arch}.json}"
     wrapper_lib="${KWIN_ANDROID_WRAPPER_LIBRARY:-$PREFIX/lib/libvulkan_wrapper.so}"
-    kgsl_device="${KWIN_ANDROID_KGSL_DEVICE:-/dev/kgsl-3d0}"
     if [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
         android_vulkan="${KWIN_ANDROID_SYSTEM_VULKAN_LIBRARY:-/system/lib64/libvulkan.so}"
-        android_egl="${KWIN_ANDROID_SYSTEM_EGL_LIBRARY:-/system/lib64/libEGL.so}"
-        android_gles="${KWIN_ANDROID_SYSTEM_GLES_LIBRARY:-/system/lib64/libGLESv2.so}"
     else
         android_vulkan="${KWIN_ANDROID_SYSTEM_VULKAN_LIBRARY:-/system/lib/libvulkan.so}"
-        android_egl="${KWIN_ANDROID_SYSTEM_EGL_LIBRARY:-/system/lib/libEGL.so}"
-        android_gles="${KWIN_ANDROID_SYSTEM_GLES_LIBRARY:-/system/lib/libGLESv2.so}"
     fi
 
     requested_icd="${VK_DRIVER_FILES:-${VK_ICD_FILENAMES:-}}"
-    case "$requested_icd" in
-        *vortek*|*/glibc/*)
-            echo "Ignoring non-Bionic Vulkan ICD: $requested_icd"
-            unset VK_DRIVER_FILES VK_ICD_FILENAMES TERMUX_VULKAN_BROKER_SOCKET
-            requested_icd=
-            ;;
-    esac
-
     case "$mode" in
-        system|system-gles|gles)
+        system)
             kwin_android_use_system_gles
-            ACCELERATION_MODE="Android system EGL/GLES (forced)"
+            ACCELERATION_MODE="Android system EGL/GLES (explicit)"
             export ACCELERATION_MODE
             return 0
             ;;
-        llvmpipe|software)
+        llvmpipe)
             kwin_android_use_llvmpipe
-            ACCELERATION_MODE="Mesa Software (llvmpipe, forced)"
+            ACCELERATION_MODE="Mesa Software (llvmpipe, explicit)"
             export ACCELERATION_MODE
             return 0
             ;;
-        auto|zink|hardware|turnip|kgsl|wrapper)
+        zink|turnip|kgsl)
+            if [ -z "$requested_icd" ]; then
+                requested_icd="${KWIN_ANDROID_TURNIP_ICD:-$PREFIX/share/vulkan/icd.d/freedreno_icd.aarch64.json}"
+            fi
+            case "$requested_icd" in
+                *vortek*|*/glibc/*)
+                    echo "Unsupported non-Bionic Vulkan ICD: $requested_icd" >&2
+                    return 1
+                    ;;
+            esac
+            if [ ! -r "$requested_icd" ]; then
+                echo "Requested Zink Vulkan ICD is unavailable: $requested_icd" >&2
+                return 1
+            fi
+            if ! kwin_android_probe_zink_icd "$requested_icd" "" ''; then
+                echo "Requested Zink Vulkan ICD failed its hardware probe: $requested_icd" >&2
+                return 1
+            fi
+            kwin_android_configure_icd_zink "$requested_icd" "Explicit Vulkan ICD (Zink): $requested_icd"
+            return 0
+            ;;
+        wrapper)
+            if [ ! -r "$wrapper_icd" ] || [ ! -r "$wrapper_lib" ] || [ ! -r "$android_vulkan" ]; then
+                echo "Requested Android Vulkan wrapper is unavailable" >&2
+                return 1
+            fi
+            if ! kwin_android_probe_zink_icd "$wrapper_icd" "$android_vulkan" ''; then
+                echo "Requested Android Vulkan wrapper failed its Zink hardware probe" >&2
+                return 1
+            fi
+            kwin_android_configure_wrapper_zink "$wrapper_icd" "$android_vulkan"
+            return 0
             ;;
         *)
-            echo "Unsupported KWIN_ANDROID_GL_MODE: $mode" >&2
+            echo "KWIN_ANDROID_GL_MODE must explicitly specify system, zink, turnip, kgsl, wrapper or llvmpipe; got: $mode" >&2
             return 2
             ;;
     esac
+}
 
-    # An explicit native Bionic ICD is the most specific Vulkan override.
-    if [ -n "$requested_icd" ]; then
-        kwin_android_configure_icd_zink "$requested_icd" "Explicit native Vulkan ICD (Zink)"
-        return 0
-    fi
-
-    turnip_icd="$(kwin_android_find_turnip_icd "$arch" || true)"
-    if [ -n "$turnip_icd" ] \
-        && [ -r "$PREFIX/lib/libvulkan_freedreno.so" ] \
-        && [ -r "$kgsl_device" ] \
-        && [ -w "$kgsl_device" ]; then
-        if kwin_android_probe_zink_icd "$turnip_icd" "" 'Turnip|Adreno'; then
-            kwin_android_configure_icd_zink "$turnip_icd" "Mesa Turnip KGSL (Zink)"
-            return 0
-        fi
-        echo "Turnip/KGSL files found, but the Zink probe failed" >&2
-    fi
-
-    if [ "$mode" = "turnip" ] || [ "$mode" = "kgsl" ]; then
-        echo "Requested Turnip/KGSL rendering is unavailable" >&2
-        return 1
-    fi
-
-    if [ -r "$wrapper_icd" ] && [ -r "$wrapper_lib" ] && [ -r "$android_vulkan" ]; then
-        if [ "$mode" = "wrapper" ] \
-            || [ "$mode" = "zink" ] \
-            || [ "$mode" = "hardware" ] \
-            || [ "${KWIN_ANDROID_AUTO_PREFER_WRAPPER:-0}" = "1" ]; then
-            if kwin_android_probe_zink_icd "$wrapper_icd" "$android_vulkan" ''; then
-                kwin_android_configure_wrapper_zink "$wrapper_icd" "$android_vulkan"
-                return 0
+# Configure native Qt clients only after the compositor has started. Qt's
+# default wayland-egl integration otherwise selects Mesa even in system mode.
+kwin_android_configure_qt_clients()
+{
+    case "$KWIN_ANDROID_GL_MODE" in
+        system)
+            local egl_dir="$PREFIX/lib/qt6/termux-system-egl"
+            local plugin="$PREFIX/lib/qt6/plugins/wayland-graphics-integration-client/libqt-plugin-termux-ahardware-buffer.so"
+            if [ ! -r "$egl_dir/libEGL.so.1" ] || [ ! -r "$plugin" ]; then
+                echo "Requested native Qt system EGL/AHardwareBuffer client integration is unavailable" >&2
+                return 1
             fi
-            echo "Android Vulkan wrapper files found, but the Zink probe failed" >&2
-        fi
-    elif [ "$mode" = "wrapper" ]; then
-        echo "Requested Android Vulkan wrapper is unavailable" >&2
-        return 1
-    fi
-
-    # Direct Android EGL/GLES is the reliable hardware path for emulators and
-    # non-KGSL devices. It also avoids an unnecessary GL-to-Vulkan translation.
-    if [ "$mode" = "auto" ] && [ -r "$android_egl" ] && [ -r "$android_gles" ]; then
-        kwin_android_use_system_gles
-        ACCELERATION_MODE="Android system EGL/GLES (auto)"
-        export ACCELERATION_MODE
-        return 0
-    fi
-
-    # vulkan-loader-android exposes the Android loader through this symlink.
-    loader_path="$(readlink -f "$PREFIX/lib/libvulkan.so" 2>/dev/null || true)"
-    case "$loader_path" in
-        /system/*/libvulkan.so)
-            if [ "$mode" = "zink" ] || [ "$mode" = "hardware" ]; then
-                kwin_android_use_zink
-                unset VK_DRIVER_FILES VK_ICD_FILENAMES WRAPPER_VULKAN_PATH TERMUX_VULKAN_BROKER_SOCKET
-                ACCELERATION_MODE="Android system Vulkan (Zink)"
-                export ACCELERATION_MODE
-                return 0
+            export LD_LIBRARY_PATH="$egl_dir"
+            export QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=termux-ahardware-buffer
+            export QT_OPENGL=es2
+            export QSG_RHI_BACKEND=opengl
+            export QT_QUICK_BACKEND=
+            export MESA_LOADER_DRIVER_OVERRIDE= GALLIUM_DRIVER= LIBGL_ALWAYS_SOFTWARE=0
+            export TERMUX_ANDROID_ZINK=0 __EGL_VENDOR_LIBRARY_FILENAMES= EGL_PLATFORM=
+            unset VK_DRIVER_FILES VK_ICD_FILENAMES WRAPPER_VULKAN_PATH MESA_VK_WSI_DEBUG TERMUX_VULKAN_BROKER_SOCKET
+            unset MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE LP_NUM_THREADS
+            ;;
+        zink|llvmpipe)
+            local mesa_vendor="$PREFIX/share/glvnd/egl_vendor.d/50_mesa.json"
+            if [ ! -r "$mesa_vendor" ]; then
+                echo "Requested native Qt Mesa EGL vendor is unavailable: $mesa_vendor" >&2
+                return 1
+            fi
+            export LD_LIBRARY_PATH="$PREFIX/lib"
+            export __EGL_VENDOR_LIBRARY_FILENAMES="$mesa_vendor"
+            export QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=wayland-egl
+            export QT_OPENGL=desktop
+            export EGL_PLATFORM=wayland
+            export TERMUX_ANDROID_ZINK=1
+            export MESA_LOADER_DRIVER_OVERRIDE="$KWIN_ANDROID_GL_MODE" GALLIUM_DRIVER="$KWIN_ANDROID_GL_MODE"
+            export QSG_RHI_BACKEND=opengl
+            if [ "$KWIN_ANDROID_GL_MODE" = llvmpipe ]; then
+                export QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1
+            else
+                export QT_QUICK_BACKEND= LIBGL_ALWAYS_SOFTWARE=0
             fi
             ;;
+        *)
+            echo "Native Qt client mode is not explicit: $KWIN_ANDROID_GL_MODE" >&2
+            return 2
+            ;;
     esac
-
-    if [ "$mode" = "zink" ] || [ "$mode" = "hardware" ] || [ "$mode" = "wrapper" ]; then
-        echo "Requested hardware-backed Zink rendering is unavailable" >&2
-        return 1
-    fi
-
-    # No hardware path and no readable Android system EGL/GLES. Do not silently
-    # drop to software: that hides a broken environment behind a slow desktop.
-    # The user must opt in to software rendering explicitly.
-    echo "auto: no hardware renderer and no usable Android system EGL/GLES was found." >&2
-    echo "auto: set KWIN_ANDROID_GL_MODE=llvmpipe to force Mesa software rendering." >&2
-    return 1
+    export QT_QPA_PLATFORM=wayland QSG_RENDER_LOOP=basic __EGL_VENDOR_LIBRARY_DIRS=
+    # D-Bus activation cannot remove a variable by importing an unset name.
+    # Publish every owned key, using an explicit empty value to clear old modes.
+    KWIN_ANDROID_QT_CLIENT_ENV_VARS=(KWIN_ANDROID_GL_MODE LD_LIBRARY_PATH QT_QPA_PLATFORM QT_OPENGL
+        QT_WAYLAND_CLIENT_BUFFER_INTEGRATION QSG_RHI_BACKEND QT_QUICK_BACKEND QSG_RENDER_LOOP
+        EGL_PLATFORM __EGL_VENDOR_LIBRARY_FILENAMES __EGL_VENDOR_LIBRARY_DIRS
+        MESA_LOADER_DRIVER_OVERRIDE GALLIUM_DRIVER LIBGL_ALWAYS_SOFTWARE TERMUX_ANDROID_ZINK
+        VK_DRIVER_FILES VK_ICD_FILENAMES WRAPPER_VULKAN_PATH MESA_VK_WSI_DEBUG TERMUX_VULKAN_BROKER_SOCKET
+        MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE LP_NUM_THREADS)
+    local variable
+    for variable in "${KWIN_ANDROID_QT_CLIENT_ENV_VARS[@]}"; do
+        export "$variable=${!variable-}"
+    done
+    echo "Native Qt client mode: $KWIN_ANDROID_GL_MODE; integration=$QT_WAYLAND_CLIENT_BUFFER_INTEGRATION; RHI=$QSG_RHI_BACKEND; Quick=${QT_QUICK_BACKEND:-rhi}"
 }

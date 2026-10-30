@@ -1,0 +1,36 @@
+{
+  "base_commit": "ff4c62953913ad11f0dedf9658bc8bde52ac3fa5",
+  "verified_overlay_sha256": "c358738df64b81e8abe8d4aa57b74978f2959e23f9061389f6d63f1371b2daf8",
+  "designated_builder": "builder@120.24.191.156:7022",
+  "native_compilation_during_repack": false,
+  "source_epoch": 1793314800,
+  "two_fresh_repack_sha256_equal": true,
+  "native_assets": 9,
+  "kwin_payload_changes": 8,
+  "qtbase_payload_changes": 1,
+  "qtbase_gtk_payload_changes": 0,
+  "qtbase_cross_tools_payload_changes": 0,
+  "regressions": {
+    "explicit_mode_shell": {
+      "exit": 0,
+      "checks": 16
+    },
+    "production_start_conflicts": {
+      "exit": 0,
+      "checks": 5
+    },
+    "real_dbus_activation_environment": {
+      "exit": 0,
+      "modes": [
+        "zink",
+        "system",
+        "llvmpipe"
+      ]
+    }
+  },
+  "source_files_match_original_builder": {
+    "kwin_native_files": 7,
+    "qt_ahb_files": 5
+  },
+  "device_logs_included": false
+}

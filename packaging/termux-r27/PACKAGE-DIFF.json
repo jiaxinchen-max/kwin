@@ -1,0 +1,155 @@
+{
+  "kwin_6.6.0-27_aarch64.deb": {
+    "package": "kwin",
+    "version": "6.6.0-27",
+    "architecture": "aarch64",
+    "depends": "aurorae, breeze, kf6-kauth, kf6-kcmutils, kf6-kcolorscheme, kf6-kconfig, kf6-kcoreaddons, kf6-kcrash, kf6-kdeclarative, kdecoration, kf6-kglobalaccel, kglobalacceld, kf6-kguiaddons, kf6-ki18n, kf6-kidletime, kf6-kirigami, kf6-kitemmodels, kf6-knewstuff, kf6-knotifications, kf6-kpackage, kf6-kservice, kf6-ksvg, kf6-kwidgetsaddons, kf6-kwindowsystem, kf6-kxmlgui, knighttime, libc++, libcanberra, libdisplay-info, libdrm, libepoxy (>= 1.5.10-6), libplasma, libqaccessibilityclient-qt6, libwayland, libx11, libxcb, libxi, libxkbcommon, littlecms, mesa, plasma-activities, qt6-qt5compat, qt6-qtbase (= 6.12.0-1+termuxkwin1), qt6-qtdeclarative, qt6-qtsensors, qt6-qtsvg, qt6-qttools, qt6-qtwayland, xcb-util-cursor, xcb-util-keysyms, xcb-util-wm,libxcvt,kwayland, libandroid-stub (>= 30-1)",
+    "sha256": "b5c4ccd7983849eea8008cb5d61740c90ab834d3fa23730385e0a01dafe8ecf3",
+    "base_asset": "kwin_6.6.0-26_aarch64.deb",
+    "base_sha256": "8973972bc8538902f6cd4940a2b388b11e10aa2b968d015c9a03ad559129a5e3",
+    "payload_file_count": 856,
+    "unchanged_file_count": 848,
+    "payload_diff": [
+      {
+        "path": "data/data/com.termux/files/usr/bin/kwin-android-rendering-env",
+        "before": {
+          "mode": 448,
+          "sha256": "e8c5ccaa3ffa9817860266e49efa468bba66d528ada472a6bf3d256554264093"
+        },
+        "after": {
+          "mode": 493,
+          "sha256": "c00cef0311e4829e8229059837cb8ee177751345856c159294b15494572c42da"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/bin/kwin-qt-client-renderer-probe",
+        "before": null,
+        "after": {
+          "mode": 493,
+          "sha256": "2f56beabb6caeea4e0d44f9300227bf02d14c9137326868f7c7daabc16d3c3bb"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/bin/kwin_wayland",
+        "before": {
+          "mode": 448,
+          "sha256": "9c42896dc8d26ed9697e99e5300dd9fad80cecfb558271632d10c2040f5f78e9"
+        },
+        "after": {
+          "mode": 493,
+          "sha256": "8ccb4e3bd40ca9dfd9426e49056fcd8167dca54900ac01c54fa33775844bbd36"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/bin/start-plasma",
+        "before": {
+          "mode": 448,
+          "sha256": "033984a015236fcdfd1360fe6222e8ddfca02bde82bf7f9d65f87ad5d6cc6b89"
+        },
+        "after": {
+          "mode": 493,
+          "sha256": "366c1300a6b3c255e401b13d358778b2536300a4a92fe96117887ed9431e6de0"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/lib/libkwin.so.6.6.7",
+        "before": {
+          "mode": 384,
+          "sha256": "fa051493bc3c0c13d87f3ec558d7c0e47e176469eabf745df493b08417fee54b"
+        },
+        "after": {
+          "mode": 493,
+          "sha256": "eee1bfc582e045ec44d8a9216ff787e435a8409a3ce4afbb0cd2114f131c4c87"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/lib/qt6/plugins/wayland-graphics-integration-client/libqt-plugin-termux-ahardware-buffer.so",
+        "before": null,
+        "after": {
+          "mode": 493,
+          "sha256": "ad6533bb6a2ddbb7bc1333d60cfb262261454b6650ee105c04a0f31eddccdf69"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/lib/qt6/termux-system-egl/libEGL.so",
+        "before": null,
+        "after": {
+          "mode": 493,
+          "sha256": "d5e14819eff485aef4cb3373a713ff6c2eb6da8de9fe976ae7874990295b77d1"
+        }
+      },
+      {
+        "path": "data/data/com.termux/files/usr/lib/qt6/termux-system-egl/libEGL.so.1",
+        "before": null,
+        "after": {
+          "mode": 493,
+          "sha256": "d5e14819eff485aef4cb3373a713ff6c2eb6da8de9fe976ae7874990295b77d1"
+        }
+      }
+    ],
+    "control_sha256": {
+      "control": "02784cfbf5848aa0dd8727adeb1ee10971b5d29e1d0a8af95387910d49145a5f",
+      "md5sums": "1d484a9e33a1911ba236b160de8d55a76a8d3d61dfa0b4ea31ad64db5ccc7b02"
+    }
+  },
+  "qt6-qtbase_6.12.0-1+termuxkwin1_aarch64.deb": {
+    "package": "qt6-qtbase",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "aarch64",
+    "depends": "brotli, double-conversion, freetype, glib, harfbuzz, krb5, libandroid-posix-semaphore, libandroid-shmem, libc++, libdrm, libglvnd-dev, libice, libicu, libjpeg-turbo, libpng, libsm, libsqlite, libuuid, libx11, libxcb, libxi, libxkbcommon, libwayland, opengl, openssl, pcre2, vulkan-loader, xcb-util-cursor, xcb-util-image, xcb-util-keysyms, xcb-util-renderutil, xcb-util-wm, xdg-utils, zlib, zstd",
+    "sha256": "5b1507ff7c945c284e9230138752ccf2b63119cf03c4d782714aa8b3a6e91262",
+    "base_asset": "qt6-qtbase_6.12.0_aarch64.deb",
+    "base_sha256": "d3075b12483b94d9ac75404378c7dd5b944321201b2b50b4166b66f806c735d8",
+    "payload_file_count": 4666,
+    "unchanged_file_count": 4665,
+    "payload_diff": [
+      {
+        "path": "data/data/com.termux/files/usr/lib/qt6/plugins/wayland-shell-integration/libxdg-shell.so",
+        "before": {
+          "mode": 384,
+          "sha256": "5bebc248782d2feb3b48ccaf121fb546b18a9bac8ec4533763a31664092bffdd"
+        },
+        "after": {
+          "mode": 493,
+          "sha256": "76d7ddc767cf70fc340f57b84f2fdacd88ca7be15c46ec0286a882d0a0bf397b"
+        }
+      }
+    ],
+    "control_sha256": {
+      "control": "3ba4f5d3b7a3009c3e829aa2ad856c8ad1c955e965787373b0626e31983650a0",
+      "md5sums": "8dd3dfcb85b3b9a6b4fc6caf6d6b5235ed748064fcb432ba5405557cff346c9f"
+    }
+  },
+  "qt6-qtbase-gtk-platformtheme_6.12.0-1+termuxkwin1_aarch64.deb": {
+    "package": "qt6-qtbase-gtk-platformtheme",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "aarch64",
+    "depends": "gdk-pixbuf, gtk3, pango, qt6-qtbase (= 6.12.0-1+termuxkwin1)",
+    "sha256": "c682bf46ff7251449f41c420fe7818b2ff4f91a21477266fc458bf7d86795bb5",
+    "base_asset": "qt6-qtbase-gtk-platformtheme_6.12.0_aarch64.deb",
+    "base_sha256": "675942fb7082a1b615658d064e4b69a585bc4ea6eec93487e21e7dd04372fc99",
+    "payload_file_count": 1,
+    "unchanged_file_count": 1,
+    "payload_diff": [],
+    "control_sha256": {
+      "control": "8c727679eb06832464a2885e8cd868fff0f091e98e6d1e8edaddc1f1cb8acb28",
+      "md5sums": "3ee2b4c2e29ef85ac5975aac748cd416eacc353e1995995c8704cd30d130b32e"
+    }
+  },
+  "qt6-qtbase-cross-tools_6.12.0-1+termuxkwin1_all.deb": {
+    "package": "qt6-qtbase-cross-tools",
+    "version": "6.12.0-1+termuxkwin1",
+    "architecture": "all",
+    "depends": "qt6-qtbase (= 6.12.0-1+termuxkwin1)",
+    "sha256": "07b9a9ae857225a814e85c74fdc613cc0720c328d3b2f4f5270a47b67169bf5f",
+    "base_asset": "qt6-qtbase-cross-tools_6.12.0_all.deb",
+    "base_sha256": "fa572b4ca8529f658602b70ba38cdc6e665f777f96a526cefbd18bea3a50310d",
+    "payload_file_count": 4494,
+    "unchanged_file_count": 4494,
+    "payload_diff": [],
+    "control_sha256": {
+      "control": "5e0dda22e4c9bc7cae39651d0f7e147e85ef62b2792a81836f4ccf89826e1370",
+      "md5sums": "c1eb5381099a961a15ea3f2c71956c8f2c1291e387bd5546880c240bf8a84fd3"
+    }
+  }
+}
