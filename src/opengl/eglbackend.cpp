@@ -102,8 +102,7 @@ bool EglBackend::ensureGlobalShareContext(EGLConfig config)
 
 void EglBackend::destroyGlobalShareContext()
 {
-    EglDisplay *const eglDisplay = kwinApp()->outputBackend()->sceneEglDisplayObject();
-    if (!eglDisplay || !s_globalShareContext) {
+    if (!s_globalShareContext) {
         return;
     }
     s_globalShareContext.reset();
