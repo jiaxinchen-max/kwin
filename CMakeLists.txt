@@ -510,6 +510,13 @@ add_subdirectory(data)
 add_subdirectory(kconf_update)
 add_subdirectory(src)
 
+option(KWIN_BUILD_TERMUX_QT_CLIENT_TOOLS
+    "Build the Qt client integration required by the Android backend"
+    ${KWIN_BUILD_ANDROID_AHARDWAREBUFFER})
+if (KWIN_BUILD_TERMUX_QT_CLIENT_TOOLS)
+    add_subdirectory(tools/termux-qt-ahb-plugin)
+endif()
+
 if (BUILD_TESTING)
     if (Qt6WaylandClient_VERSION VERSION_GREATER_EQUAL "6.10.0")
         find_package(Qt6WaylandClientPrivate ${REQUIRED_QT_VERSION} REQUIRED NO_MODULE)
