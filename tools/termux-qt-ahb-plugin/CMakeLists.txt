@@ -10,11 +10,18 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGL WaylandClient)
 find_package(Qt6GuiPrivate REQUIRED)
 find_package(Qt6WaylandClientPrivate REQUIRED)
 find_package(Wayland REQUIRED COMPONENTS Client)
+include(FindWaylandScanner)
 
 add_library(qt-plugin-termux-ahardware-buffer MODULE
     main.cpp
     termuxahardwarebuffer.cpp
     termuxahardwarebuffer.h
+)
+
+ecm_add_wayland_client_protocol(qt-plugin-termux-ahardware-buffer
+    PRIVATE_CODE
+    PROTOCOL ${CMAKE_SOURCE_DIR}/src/wayland/protocols/termux-ahardware-buffer-v1.xml
+    BASENAME termux-ahardware-buffer-v1
 )
 
 target_link_libraries(qt-plugin-termux-ahardware-buffer PRIVATE

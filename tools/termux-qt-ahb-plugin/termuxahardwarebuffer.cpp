@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-3.0-only */
 #include "termuxahardwarebuffer.h"
+#include "wayland-termux-ahardware-buffer-v1-client-protocol.h"
 
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtGui/QOffscreenSurface>
@@ -21,29 +22,12 @@ QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
 
-static const wl_interface *s_createBufferTypes[] = {
-    &wl_buffer_interface,
-    nullptr,
-};
-
-static const wl_message s_managerRequests[] = {
-    { "destroy", "", nullptr },
-    { "create_buffer", "nh", s_createBufferTypes },
-};
-
-static const wl_interface s_managerInterface = {
-    "termux_ahardware_buffer_manager_v1",
-    1,
-    2,
-    s_managerRequests,
-    0,
-    nullptr,
-};
-
 static wl_buffer *createWaylandBuffer(wl_proxy *manager, int socket)
 {
-    return reinterpret_cast<wl_buffer *>(wl_proxy_marshal_flags(
-        manager, 1, &wl_buffer_interface, wl_proxy_get_version(manager), 0, nullptr, socket));
+    // Generate this request from the same XML as the compositor. No flags
+    // means preserve alpha and use the native channel order.
+    return termux_ahardware_buffer_manager_v1_create_buffer(
+        reinterpret_cast<termux_ahardware_buffer_manager_v1 *>(manager), socket, 0);
 }
 
 TermuxAHardwareBufferIntegration::TermuxAHardwareBufferIntegration() = default;
@@ -151,9 +135,9 @@ void TermuxAHardwareBufferIntegration::registryGlobal(void *data, wl_registry *r
 {
     auto *integration = static_cast<TermuxAHardwareBufferIntegration *>(data);
     if (!integration->m_bufferManager
-        && interface == QLatin1String(s_managerInterface.name)) {
+        && interface == QLatin1String(termux_ahardware_buffer_manager_v1_interface.name)) {
         integration->m_bufferManager = reinterpret_cast<wl_proxy *>(wl_registry_bind(
-            registry, id, &s_managerInterface, std::min(version, 1u)));
+            registry, id, &termux_ahardware_buffer_manager_v1_interface, std::min(version, 1u)));
     }
 }
 

@@ -26,7 +26,7 @@ template<typename Function> Function resolve(const char *name)
     return function;
 }
 }
-extern "C" const char *termux_system_egl_dispatch()
+extern "C" __attribute__((visibility("default"))) const char *termux_system_egl_dispatch()
 {
     systemEgl();
     return "android-system-egl-v1";
