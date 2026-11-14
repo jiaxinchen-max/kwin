@@ -46,10 +46,10 @@ void AndroidOutput::updateMode()
     const LorieBuffer_Desc *desc = LorieBuffer_description(m_backend->lorieBuffer());
 
     // Create mode
-    auto mode = std::make_shared<OutputMode>(
+    auto mode = std::make_shared<OutputMode>(OutputModeline(
         QSize(desc->width, desc->height),
         m_backend->refreshRate() * 1000
-    );
+    ));
 
     setState(State{
         .position = QPoint(0, 0),

@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <errno.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <linux/input-event-codes.h>
 
 struct termux_input_bridge {
@@ -23,18 +25,61 @@ struct termux_input_bridge {
 
 static struct termux_input_bridge *global_bridge = NULL;
 
+/* Event trace for diagnosing input problems: create ~/.termux/kwin-input-debug before starting the
+ * desktop and every event the display app sends is written to KWin's stderr (the desktop log). */
+static int
+input_debug_enabled(void)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *home = getenv("HOME");
+        char path[512];
+        enabled = 0;
+        if (home && snprintf(path, sizeof(path), "%s/.termux/kwin-input-debug", home) < (int) sizeof(path))
+            enabled = access(path, F_OK) == 0;
+    }
+    return enabled;
+}
+
+static void
+trace_android_event(const lorieEvent *event)
+{
+    switch (event->type) {
+    case EVENT_MOUSE:
+        fprintf(stderr, "termux-input: mouse detail=%u x=%g y=%g down=%u relative=%u\n",
+                (unsigned) event->mouse.detail, (double) event->mouse.x, (double) event->mouse.y,
+                (unsigned) event->mouse.down, (unsigned) event->mouse.relative);
+        break;
+    case EVENT_TOUCH:
+        fprintf(stderr, "termux-input: touch type=%u id=%u x=%u y=%u\n",
+                (unsigned) event->touch.type, (unsigned) event->touch.id,
+                (unsigned) event->touch.x, (unsigned) event->touch.y);
+        break;
+    case EVENT_KEY:
+        fprintf(stderr, "termux-input: key code=%u state=%u\n",
+                (unsigned) event->key.key, (unsigned) event->key.state);
+        break;
+    default:
+        fprintf(stderr, "termux-input: event type=%u\n", (unsigned) event->type);
+        break;
+    }
+    fflush(stderr);
+}
+
 /* Forward declaration */
 static void process_android_event(struct termux_input_bridge *bridge, const lorieEvent *event);
 
 static uint32_t lorie_button_to_linux(uint8_t detail)
 {
+    /* The display app numbers buttons like X11 (and like its InputStub): 1 left, 2 middle, 3 right.
+     * Two-finger taps send 3 and three-finger taps send 2, so mapping 2 to right swapped them. */
     switch (detail) {
     case 1:
         return BTN_LEFT;
     case 2:
-        return BTN_RIGHT;
-    case 3:
         return BTN_MIDDLE;
+    case 3:
+        return BTN_RIGHT;
     default:
         return detail;
     }
@@ -78,6 +123,9 @@ process_android_event(struct termux_input_bridge *bridge, const lorieEvent *even
     if (!libinput || !event)
         return;
 
+    if (input_debug_enabled())
+        trace_android_event(event);
+
     /* Get the first available device (we create virtual devices) */
     device = libinput->devices;
     if (!device)
@@ -115,34 +163,42 @@ process_android_event(struct termux_input_bridge *bridge, const lorieEvent *even
 
     case EVENT_MOUSE:
         {
-            if (event->mouse.relative) {
-                /* Relative mouse motion */
-                libinput_event = create_pointer_event(
-                    libinput, device,
-                    LIBINPUT_EVENT_POINTER_MOTION,
-                    event->mouse.x, event->mouse.y
-                );
-            } else {
-                /* Absolute mouse motion */
-                libinput_event = create_pointer_event(
-                    libinput, device,
-                    LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE,
-                    event->mouse.x, event->mouse.y
-                );
-            }
+            /* detail 0 = pointer motion, 1-3 = buttons (their x/y are not a position),
+             * 4 = wheel (x/y are scroll deltas in 1/120 notch units). Only motion may
+             * move the pointer. */
+            if (event->mouse.detail == 0) {
+                if (event->mouse.relative) {
+                    /* Relative mouse motion */
+                    libinput_event = create_pointer_event(
+                        libinput, device,
+                        LIBINPUT_EVENT_POINTER_MOTION,
+                        event->mouse.x, event->mouse.y
+                    );
+                } else {
+                    /* Absolute mouse motion */
+                    libinput_event = create_pointer_event(
+                        libinput, device,
+                        LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE,
+                        event->mouse.x, event->mouse.y
+                    );
+                }
 
-            if (libinput_event) {
-                queue_event(libinput, libinput_event);
-            }
-
-            /* Handle mouse button */
-            if (event->mouse.detail > 0) {
+                if (libinput_event) {
+                    queue_event(libinput, libinput_event);
+                }
+            } else if (event->mouse.detail >= 1 && event->mouse.detail <= 3) {
                 libinput_event = create_pointer_button_event(
                     libinput, device,
                     lorie_button_to_linux(event->mouse.detail),
                     event->mouse.down ? LIBINPUT_BUTTON_STATE_PRESSED : LIBINPUT_BUTTON_STATE_RELEASED
                 );
 
+                if (libinput_event) {
+                    queue_event(libinput, libinput_event);
+                }
+            } else if (event->mouse.detail == 4) {
+                libinput_event = create_pointer_scroll_event(
+                    libinput, device, event->mouse.x, event->mouse.y);
                 if (libinput_event) {
                     queue_event(libinput, libinput_event);
                 }

@@ -90,8 +90,7 @@ bool EglBackend::ensureGlobalShareContext()
     if (!s_globalShareContext) {
         s_globalShareContext = EglContext::create(m_renderDevice->eglDisplay(), EGL_NO_CONFIG_KHR, nullptr);
         connect(Compositor::self(), &Compositor::aboutToDestroy, qApp, []() {
-            EglDisplay *const eglDisplay = kwinApp()->outputBackend()->sceneEglDisplayObject();
-            if (!eglDisplay || !s_globalShareContext) {
+            if (!s_globalShareContext) {
                 return;
             }
             s_globalShareContext.reset();

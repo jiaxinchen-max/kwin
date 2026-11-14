@@ -72,10 +72,7 @@ private:
     wl_proxy *m_bufferManager = nullptr;
     void *m_androidLibrary = nullptr;
     void *m_eglLibrary = nullptr;
-    mutable void *m_epoxyLibrary = nullptr;
-    mutable void *m_dlAndroidLibrary = nullptr;
-    mutable void *m_glesLibrary = nullptr;
-    mutable bool m_vendorLoadAttempted = false;
+    void *m_platformLibrary = nullptr;
     PFNEGLGETDISPLAYPROC m_getDisplay = nullptr;
     PFNEGLINITIALIZEPROC m_initialize = nullptr;
     PFNEGLTERMINATEPROC m_terminate = nullptr;

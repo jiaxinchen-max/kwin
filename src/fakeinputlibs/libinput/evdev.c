@@ -87,6 +87,33 @@ create_pointer_event(struct libinput *libinput,
 }
 
 struct libinput_event *
+create_pointer_scroll_event(struct libinput *libinput,
+                            struct libinput_device *device,
+                            double dx_v120, double dy_v120)
+{
+    struct libinput_event *event;
+
+    event = libinput_event_create(device, LIBINPUT_EVENT_POINTER_SCROLL_WHEEL, libinput_now_usec());
+    if (!event)
+        return NULL;
+
+    /* One wheel notch is 120 units; the scroll value is in the usual 15 px per notch. */
+    event->event.pointer.axis_source = LIBINPUT_POINTER_AXIS_SOURCE_WHEEL;
+    if (dx_v120 != 0.0) {
+        event->event.pointer.has_scroll_h = 1;
+        event->event.pointer.scroll_h_value_v120 = dx_v120;
+        event->event.pointer.scroll_h_value = dx_v120 / 120.0 * 15.0;
+    }
+    if (dy_v120 != 0.0) {
+        event->event.pointer.has_scroll_v = 1;
+        event->event.pointer.scroll_v_value_v120 = dy_v120;
+        event->event.pointer.scroll_v_value = dy_v120 / 120.0 * 15.0;
+    }
+
+    return event;
+}
+
+struct libinput_event *
 create_pointer_button_event(struct libinput *libinput,
                            struct libinput_device *device,
                            uint32_t button,

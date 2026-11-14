@@ -417,7 +417,7 @@ AndroidHardwareClientBuffer::AndroidHardwareClientBuffer(AHardwareBuffer *buffer
         return;
     }
 
-    connect(this, &GraphicsBuffer::released, [this]() {
+    connect(this, &GraphicsBuffer::released, this, [this]() {
         if (m_resource) {
             wl_buffer_send_release(m_resource);
         }

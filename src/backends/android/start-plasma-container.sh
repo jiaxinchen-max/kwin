@@ -11,6 +11,10 @@
 #   PLASMA_CONTAINER_DISTRO         proot-distro name (default: debian)
 #   PLASMA_CONTAINER_SESSION_SCRIPT path to the in-container session launcher
 #                                   (default: the installed plasma-container-session.sh)
+#   TURNIP_TARBALL_URL              Turnip (Adreno Vulkan) tarball to unpack into the container
+#                                   when its ICD is missing (default: the latest mesa-for-android-container asset
+#                                   for the container's distro from lfdevs/mesa-for-android-container)
+#   PLASMA_CONTAINER_ROOTFS         the container's rootfs directory (default: auto-detected)
 set -u
 
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
@@ -58,12 +62,81 @@ if ! proot-distro login "$DISTRO" -- true >/dev/null 2>&1; then
     fi
 fi
 
+# The Turnip Vulkan ICD is not an apt package (Debian's Turnip has no KGSL backend); the
+# session script aborts without it. Provision it from the host, where curl and any proxy
+# configuration (~/.curlrc, https_proxy) already work.
+ICD_REL="usr/share/vulkan/icd.d/freedreno_icd.aarch64.json"
+TURNIP_REPO="lfdevs/mesa-for-android-container"
+TURNIP_FALLBACK_TAG="mesa-27.0.0-devel-20261025"
+
+container_rootfs() {
+    if [ -n "${PLASMA_CONTAINER_ROOTFS:-}" ]; then printf '%s\n' "$PLASMA_CONTAINER_ROOTFS"; return; fi
+    for c in "$PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs" \
+             "$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"; do
+        [ -d "$c/usr" ] && { printf '%s\n' "$c"; return; }
+    done
+    return 1
+}
+
+turnip_asset_flavour() {
+    # <id>_<codename>, e.g. debian_trixie, matching the release asset names.
+    rootfs="$1"
+    id=$(sed -n 's/^ID=//p' "$rootfs/etc/os-release" 2>/dev/null | tr -d '"' | head -n1)
+    codename=$(sed -n 's/^VERSION_CODENAME=//p' "$rootfs/etc/os-release" 2>/dev/null | tr -d '"' | head -n1)
+    [ -n "$id" ] && [ -n "$codename" ] || return 1
+    # Turnip tarballs are published per stable release; forky/sid use the newest Debian one.
+    case "$id:$codename" in debian:forky|debian:sid|debian:testing) codename=trixie ;; esac
+    printf '%s_%s\n' "$id" "$codename"
+}
+
+ensure_turnip_icd() {
+    rootfs=$(container_rootfs) || {
+        echo "Warning: cannot locate the rootfs of '$DISTRO'; skipping the Turnip ICD check." >&2
+        return 0
+    }
+    [ -r "$rootfs/$ICD_REL" ] && [ -e "$rootfs/usr/lib/aarch64-linux-gnu/libvulkan_freedreno.so" ] && return 0
+
+    url="${TURNIP_TARBALL_URL:-}"
+    if [ -z "$url" ]; then
+        flavour=$(turnip_asset_flavour "$rootfs") || {
+            echo "Error: cannot tell which distro '$DISTRO' is; set TURNIP_TARBALL_URL." >&2
+            return 1
+        }
+        tag=$(curl -fsL -m 30 "https://api.github.com/repos/$TURNIP_REPO/releases?per_page=20" 2>/dev/null \
+              | sed -n 's/.*"tag_name": *"\(mesa-[^"]*\)".*/\1/p' | head -n1)
+        tag="${tag:-$TURNIP_FALLBACK_TAG}"
+        url="https://github.com/$TURNIP_REPO/releases/download/$tag/mesa-for-android-container_${tag#mesa-}_${flavour}_arm64.tar.gz"
+    fi
+
+    echo "Installing the Turnip Vulkan ICD into the container: $url"
+    tmp="${TMPDIR:-$PREFIX/tmp}/turnip.$$.tar.gz"
+    if ! curl -fL -m 300 -o "$tmp" "$url"; then
+        rm -f "$tmp"
+        echo "Error: failed to download $url (set https_proxy or ~/.curlrc if GitHub is unreachable)." >&2
+        return 1
+    fi
+    if ! tar -xzf "$tmp" -C "$rootfs"; then
+        rm -f "$tmp"
+        echo "Error: failed to unpack the Turnip tarball into $rootfs." >&2
+        return 1
+    fi
+    rm -f "$tmp"
+    [ -r "$rootfs/$ICD_REL" ] || {
+        echo "Error: the Turnip tarball did not provide /$ICD_REL." >&2
+        return 1
+    }
+}
+ensure_turnip_icd || exit 1
+
 # 1) Native compositor (reuse an existing one if already up).
 if pgrep -x kwin_wayland >/dev/null 2>&1; then
     echo "kwin_wayland already running; reusing it."
 else
     echo "Starting native compositor (start-plasma --compositor-only, GL=$GL_MODE)..."
-    setsid env KWIN_ANDROID_GL_MODE="$GL_MODE" start-plasma --compositor-only \
+    # Container clients are proot processes KWin cannot match to a desktop file, so its
+    # executable-path authorisation of privileged protocols would deny them all.
+    setsid env KWIN_ANDROID_GL_MODE="$GL_MODE" KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 \
+        start-plasma --compositor-only \
         </dev/null >/dev/null 2>&1 &
 fi
 

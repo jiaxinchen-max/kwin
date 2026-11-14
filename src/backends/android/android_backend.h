@@ -13,6 +13,7 @@
 #include "core/inputdevice.h"
 #include <kwin_export.h>
 #include <QByteArray>
+#include <QSet>
 #include <QObject>
 #include <QSocketNotifier>
 #include <memory>
@@ -81,6 +82,8 @@ private Q_SLOTS:
     void handleInputEvents();
 
 private:
+    friend class AndroidInputDevice;
+    void cancelNativeTouches();
     bool connectToDisplayServer();
     void waitForProtocolInit();
     void sendScreenConfig();
@@ -105,6 +108,7 @@ private:
     QSocketNotifier *m_inputNotifier = nullptr;
     QByteArray m_inputBuffer;
     qint64 m_inputBytesToDiscard = 0;
+    QSet<int> m_activeTouches;
     AndroidInputDevice *m_touchDevice = nullptr;
     AndroidInputDevice *m_keyboardDevice = nullptr;
     AndroidInputDevice *m_pointerDevice = nullptr;

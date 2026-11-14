@@ -27,6 +27,11 @@ create_pointer_event(struct libinput *libinput,
                      double x, double y);
 
 struct libinput_event *
+create_pointer_scroll_event(struct libinput *libinput,
+                            struct libinput_device *device,
+                            double dx_v120, double dy_v120);
+
+struct libinput_event *
 create_pointer_button_event(struct libinput *libinput,
                            struct libinput_device *device,
                            uint32_t button,

@@ -6,7 +6,8 @@
 # shell + apps run here, inside the Debian (glibc) container, and connect back
 # to the native compositor over the shared Wayland socket that start-plasma
 # exposes in its runtime dir (bind-mounted here as /run/wl). The container runs
-# its own D-Bus (the native bus cannot be shared across proot -- see below).
+# its own private D-Bus session. Access to native KWin D-Bus is a separate,
+# UID-authenticated integration boundary.
 #
 # Run it, from Termux, as:
 #   proot-distro login debian --bind \
@@ -70,7 +71,9 @@ echo "=== Plasma container session (Vulkan RHI) $(date) ==="
 ensure_container_deps() {
     needed=""
     command -v plasmashell  >/dev/null 2>&1 || needed="$needed plasma-workspace"
-    command -v dbus-launch  >/dev/null 2>&1 || needed="$needed dbus-x11"
+    # Check the container's own binary: proot-distro appends the host's Termux bin to PATH, where a
+    # bionic dbus-launch would satisfy `command -v` and start a host-side bus the container cannot use.
+    [ -x /usr/bin/dbus-launch ] || needed="$needed dbus-x11"
     # Unversioned Vulkan loader symlink that Qt's QLibrary("vulkan") dlopens.
     if ! ls /usr/lib/*/libvulkan.so >/dev/null 2>&1 && [ ! -e /usr/lib/libvulkan.so ]; then
         needed="$needed libvulkan-dev"
@@ -111,7 +114,7 @@ ensure_container_deps
 # Wayland (plasma-window-management); only org.kde.KWin D-Bus scripting is
 # unavailable across the native/container split.
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-    eval "$(dbus-launch --sh-syntax)"
+    eval "$(/usr/bin/dbus-launch --sh-syntax)"
     echo "Started container D-Bus: ${DBUS_SESSION_BUS_ADDRESS:-none}"
 fi
 
@@ -120,6 +123,17 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
         WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
         QT_QPA_PLATFORM QSG_RHI_BACKEND VK_ICD_FILENAMES >/dev/null 2>&1 || true
 fi
+
+# Discover aborts at startup on the Vulkan-only setup: it creates its window on the OpenGL RHI backend
+# even with QSG_RHI_BACKEND=vulkan, and the container has no EGL ("Failed to initialize graphics
+# backend for OpenGL" -> qFatal). Its scene graph is plain widgets and lists, so the software
+# renderer is fine. Override the launcher at user level; the packaged .desktop file stays untouched.
+for desktop in /usr/share/applications/org.kde.discover.desktop; do
+    [ -r "$desktop" ] || continue
+    mkdir -p "$HOME/.local/share/applications"
+    sed -E 's#^Exec=#Exec=env QT_QUICK_BACKEND=software #' "$desktop" \
+        > "$HOME/.local/share/applications/org.kde.discover.desktop"
+done
 
 # --- KDE services, then the shell -----------------------------------------
 LIBEXEC="${KDE_LIBEXEC:-/usr/lib/aarch64-linux-gnu/libexec}"

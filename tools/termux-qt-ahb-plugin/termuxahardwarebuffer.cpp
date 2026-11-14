@@ -60,12 +60,8 @@ TermuxAHardwareBufferIntegration::~TermuxAHardwareBufferIntegration()
         dlclose(m_androidLibrary);
     if (m_eglLibrary)
         dlclose(m_eglLibrary);
-    if (m_epoxyLibrary)
-        dlclose(m_epoxyLibrary);
-    if (m_glesLibrary)
-        dlclose(m_glesLibrary);
-    if (m_dlAndroidLibrary)
-        dlclose(m_dlAndroidLibrary);
+    if (m_platformLibrary)
+        dlclose(m_platformLibrary);
 }
 
 void TermuxAHardwareBufferIntegration::initialize(QWaylandDisplay *display)
@@ -73,11 +69,28 @@ void TermuxAHardwareBufferIntegration::initialize(QWaylandDisplay *display)
     m_display = display;
     display->addRegistryListener(&TermuxAHardwareBufferIntegration::registryGlobal, this);
 
-    m_androidLibrary = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+    if (qgetenv("KWIN_ANDROID_GL_MODE") != "system")
+        qFatal("Termux AHardwareBuffer: explicit KWIN_ANDROID_GL_MODE=system is required");
+    m_platformLibrary = dlopen("libtermux-platform-ns.so", RTLD_NOW | RTLD_LOCAL);
+    using PlatformDlopen = void *(*)(const char *, int);
+    const auto platformDlopen = m_platformLibrary
+        ? reinterpret_cast<PlatformDlopen>(dlsym(m_platformLibrary, "platform_dlopen")) : nullptr;
+    if (!platformDlopen)
+        qFatal("Termux AHardwareBuffer: required Android platform namespace bridge is unavailable");
+#if defined(__LP64__)
+    m_androidLibrary = platformDlopen("/system/lib64/libandroid.so", RTLD_NOW | RTLD_LOCAL);
+#else
+    m_androidLibrary = platformDlopen("/system/lib/libandroid.so", RTLD_NOW | RTLD_LOCAL);
+#endif
     // QtGui has already loaded libEGL.so.1 at this point. The launcher puts
     // the private Android-EGL forwarding library first in LD_LIBRARY_PATH, so
     // use that same dispatch table instead of opening a second EGL instance.
     m_eglLibrary = dlopen("libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);
+    using DispatchIdentity = const char *(*)();
+    const auto identity = m_eglLibrary
+        ? reinterpret_cast<DispatchIdentity>(dlsym(m_eglLibrary, "termux_system_egl_dispatch")) : nullptr;
+    if (!identity || QByteArray(identity()) != "android-system-egl-v1")
+        qFatal("Termux AHardwareBuffer: explicitly selected private Android EGL dispatch is required");
     if (m_eglLibrary) {
         m_getDisplay = reinterpret_cast<PFNEGLGETDISPLAYPROC>(dlsym(m_eglLibrary, "eglGetDisplay"));
         m_initialize = reinterpret_cast<PFNEGLINITIALIZEPROC>(dlsym(m_eglLibrary, "eglInitialize"));
@@ -119,7 +132,7 @@ void TermuxAHardwareBufferIntegration::initialize(QWaylandDisplay *display)
         m_eglDisplay = EGL_NO_DISPLAY;
 
     if (!isValid()) {
-        qWarning("Termux AHardwareBuffer: initialization failed manager=%p display=%p "
+        qFatal("Termux AHardwareBuffer: initialization failed manager=%p display=%p "
                  "android=%d/%d/%d egl=%d/%d/%d/%d/%d/%d/%d image=%d/%d/%d error=0x%x",
                  static_cast<void *>(m_bufferManager), m_eglDisplay,
                  bool(m_allocate), bool(m_release), bool(m_sendHandle),
@@ -223,100 +236,12 @@ wl_proxy *TermuxAHardwareBufferIntegration::bufferManager() const
 
 QFunctionPointer TermuxAHardwareBufferIntegration::procAddress(const char *name) const
 {
-    if (!m_glesLibrary && !m_vendorLoadAttempted) {
-        m_vendorLoadAttempted = true;
-#if defined(__LP64__)
-        m_dlAndroidLibrary = dlopen("/system/lib64/libdl_android.so", RTLD_NOW | RTLD_LOCAL);
-#else
-        m_dlAndroidLibrary = dlopen("/system/lib/libdl_android.so", RTLD_NOW | RTLD_LOCAL);
-#endif
-        using GetExportedNamespace = android_namespace_t *(*)(const char *);
-        using AndroidDlopenExt = void *(*)(const char *, int, const android_dlextinfo *);
-        auto getExportedNamespace = reinterpret_cast<GetExportedNamespace>(
-            dlsym(RTLD_DEFAULT, "android_get_exported_namespace"));
-        if (!getExportedNamespace) {
-            getExportedNamespace = reinterpret_cast<GetExportedNamespace>(
-                dlsym(RTLD_DEFAULT, "__loader_android_get_exported_namespace"));
-        }
-        if (!getExportedNamespace && m_dlAndroidLibrary) {
-            getExportedNamespace = reinterpret_cast<GetExportedNamespace>(
-                dlsym(m_dlAndroidLibrary, "android_get_exported_namespace"));
-        }
-        auto androidDlopenExt = reinterpret_cast<AndroidDlopenExt>(
-            dlsym(RTLD_DEFAULT, "android_dlopen_ext"));
-        if (!androidDlopenExt) {
-            androidDlopenExt = reinterpret_cast<AndroidDlopenExt>(
-                dlsym(RTLD_DEFAULT, "__loader_android_dlopen_ext"));
-        }
-        if (!androidDlopenExt && m_dlAndroidLibrary) {
-            androidDlopenExt = reinterpret_cast<AndroidDlopenExt>(
-                dlsym(m_dlAndroidLibrary, "android_dlopen_ext"));
-        }
-        if (getExportedNamespace && androidDlopenExt) {
-            android_namespace_t *sphal = getExportedNamespace("sphal");
-            if (sphal) {
-                android_dlextinfo info = {};
-                info.flags = ANDROID_DLEXT_USE_NAMESPACE;
-                info.library_namespace = sphal;
-                char driver[PROP_VALUE_MAX] = {};
-                __system_property_get("ro.hardware.egl", driver);
-#if defined(__LP64__)
-                const char *patterns[] = {
-                    "/vendor/lib64/egl/libGLESv2_%s.so",
-                    "/vendor/lib64/egl/libGLES_%s.so",
-                    "/system/lib64/egl/libGLESv2_%s.so",
-                    "/system/lib64/egl/libGLES_%s.so",
-                };
-#else
-                const char *patterns[] = {
-                    "/vendor/lib/egl/libGLESv2_%s.so",
-                    "/vendor/lib/egl/libGLES_%s.so",
-                    "/system/lib/egl/libGLESv2_%s.so",
-                    "/system/lib/egl/libGLES_%s.so",
-                };
-#endif
-                if (driver[0]) {
-                    for (const char *pattern : patterns) {
-                        char path[256];
-                        std::snprintf(path, sizeof(path), pattern, driver);
-                        m_glesLibrary = androidDlopenExt(path, RTLD_NOW | RTLD_LOCAL, &info);
-                        if (m_glesLibrary)
-                            break;
-                    }
-                }
-            }
-        }
-        if (m_glesLibrary)
-            qInfo("Termux AHardwareBuffer: using GLES from Android sphal namespace");
-        else
-            qWarning("Termux AHardwareBuffer: vendor GLES namespace load failed "
-                     "libdl_android=%p namespace_api=%d dlopen_ext=%d: %s",
-                     m_dlAndroidLibrary, bool(getExportedNamespace), bool(androidDlopenExt), dlerror());
-    }
-    if (m_glesLibrary) {
-        if (void *symbol = dlsym(m_glesLibrary, name))
-            return reinterpret_cast<QFunctionPointer>(symbol);
-    }
-
-    // Termux's patched libepoxy selects the Android system EGL/GLES libraries
-    // by absolute path. Its generated thunks are also insulated from the
-    // GLVND symbols pulled into the process by QtGui.
-    if (!m_epoxyLibrary)
-        m_epoxyLibrary = dlopen("libepoxy.so", RTLD_NOW | RTLD_LOCAL);
-    if (m_epoxyLibrary) {
-        if (void *symbol = dlsym(m_epoxyLibrary, name))
-            return reinterpret_cast<QFunctionPointer>(symbol);
-    }
-
-    // Android EGL owns the per-thread GLES dispatch table. Asking it first is
-    // required on gfxstream; dlsym(libGLESv2.so) can return public no-op
-    // trampolines when another EGL ABI was present during process startup.
-    if (m_getProcAddress) {
-        if (auto symbol = m_getProcAddress(name))
-            return reinterpret_cast<QFunctionPointer>(symbol);
-    }
-
-    return nullptr;
+    // Every function comes from the one selected Android EGL dispatch table.
+    // No vendor guessing, libepoxy/Mesa dispatch, or secondary EGL instance.
+    if (!m_getProcAddress)
+        qFatal("Termux AHardwareBuffer: Android EGL proc resolver is unavailable");
+    const auto address = m_getProcAddress(name);
+    return reinterpret_cast<QFunctionPointer>(address);
 }
 
 EGLBoolean TermuxAHardwareBufferIntegration::makeCurrent(
@@ -692,6 +617,14 @@ TermuxAHardwareBufferContext::TermuxAHardwareBufferContext(
             m_context = EGL_NO_CONTEXT;
             return;
         }
+        const auto getString = reinterpret_cast<PFNGLGETSTRINGPROC>(integration->procAddress("glGetString"));
+        if (!getString)
+            qFatal("Termux AHardwareBuffer: required Android glGetString is unavailable");
+        const QByteArray renderer(reinterpret_cast<const char *>(getString(GL_RENDERER)));
+        const auto lower = renderer.toLower();
+        if (renderer.isEmpty() || lower.contains("zink") || lower.contains("llvmpipe") || lower.contains("lavapipe"))
+            qFatal("Termux AHardwareBuffer: system mode does not match client GL_RENDERER: %s", renderer.constData());
+        qInfo("Termux AHardwareBuffer: client GL_RENDERER=%s", renderer.constData());
         m_format.setRenderableType(QSurfaceFormat::OpenGLES);
         m_format.setVersion(requestedMajor, 0);
     }

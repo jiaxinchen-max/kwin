@@ -1342,7 +1342,7 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
     if (m_flags & OutputModeline::Flag::Preferred) {
         send_preferred(resource->handle);
     }
-    if (resource->version() >= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_CUSTOM) {
+    if (resource->version() >= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_SINCE_VERSION) {
         uint32_t flags = 0;
         if (m_flags & OutputModeline::Flag::Custom) {
             flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_CUSTOM;

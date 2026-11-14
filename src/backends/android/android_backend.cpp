@@ -17,6 +17,9 @@
 #include "xkb.h"
 
 #include <QSocketNotifier>
+#include <QSet>
+#include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <chrono>
 #include <cerrno>
@@ -48,15 +51,36 @@ static int requestedLorieBufferType()
     return LORIEBUFFER_FD;
 }
 
+// Event trace for diagnosing input problems: create ~/.termux/kwin-input-debug before starting the
+// desktop and every mouse/touch event the display app sends is written to stderr (the desktop log).
+static bool inputDebugEnabled()
+{
+    static const bool enabled = [] {
+        const char *home = std::getenv("HOME");
+        if (!home) {
+            return false;
+        }
+        char path[512];
+        if (std::snprintf(path, sizeof(path), "%s/.termux/kwin-input-debug", home) >= static_cast<int>(sizeof(path))) {
+            return false;
+        }
+        return access(path, F_OK) == 0;
+    }();
+    return enabled;
+}
+
 static uint32_t lorieButtonToLinux(uint8_t detail)
 {
+    // The display app numbers buttons like X11 (and its InputStub): 1 left, 2 middle, 3 right.
+    // A two-finger tap arrives as 3, so it must become BTN_RIGHT (it used to become BTN_MIDDLE and
+    // Plasma never showed its context menu).
     switch (detail) {
     case 1:
         return BTN_LEFT;
     case 2:
-        return BTN_RIGHT;
-    case 3:
         return BTN_MIDDLE;
+    case 3:
+        return BTN_RIGHT;
     default:
         return detail;
     }
@@ -184,6 +208,7 @@ AndroidBackend::AndroidBackend(QObject *parent)
 
 AndroidBackend::~AndroidBackend()
 {
+    cancelNativeTouches();
     if (m_inputNotifier) {
         delete m_inputNotifier;
     }
@@ -352,8 +377,8 @@ std::unique_ptr<EglBackend> AndroidBackend::createOpenGLBackend()
 
 std::unique_ptr<QPainterBackend> AndroidBackend::createQPainterBackend()
 {
-    qInfo() << "Creating Android QPainter backend";
-    return std::make_unique<AndroidQPainterBackend>(this);
+    qCritical() << "Android QPainter mode is not supported; specify system, zink or llvmpipe EGL rendering";
+    return nullptr;
 }
 
 EglDisplay *AndroidBackend::sceneEglDisplayObject() const
@@ -375,7 +400,6 @@ QList<CompositingType> AndroidBackend::supportedCompositors() const
 {
     QList<CompositingType> compositors;
     compositors.append(OpenGLCompositing);
-    compositors.append(QPainterCompositing);
     return compositors;
 }
 
@@ -396,8 +420,20 @@ QString AndroidBackend::supportInformation() const
     return support;
 }
 
+void AndroidBackend::cancelNativeTouches()
+{
+    if (m_activeTouches.isEmpty()) {
+        return;
+    }
+    m_activeTouches.clear();
+    if (m_touchDevice) {
+        Q_EMIT m_touchDevice->touchCanceled(m_touchDevice);
+    }
+}
+
 void AndroidBackend::handleInputEvents()
 {
+    bool disconnected = false;
     char buffer[sizeof(lorieEvent) * 16];
     while (true) {
         const ssize_t bytesRead = read(m_connFd, buffer, sizeof(buffer));
@@ -405,14 +441,16 @@ void AndroidBackend::handleInputEvents()
             m_inputBuffer.append(buffer, static_cast<qsizetype>(bytesRead));
         } else if (bytesRead == 0) {
             qWarning() << "Android input connection closed";
-            return;
+            disconnected = true;
+            break;
         } else if (errno == EINTR) {
             continue;
         } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             break;
         } else {
             qWarning() << "Failed to read Android input event:" << strerror(errno);
-            return;
+            disconnected = true;
+            break;
         }
     }
 
@@ -447,27 +485,62 @@ void AndroidBackend::handleInputEvents()
             break;
         }
     }
+    if (disconnected) {
+        if (m_inputNotifier) {
+            m_inputNotifier->setEnabled(false);
+        }
+        m_inputBuffer.clear();
+        m_inputBytesToDiscard = 0;
+        cancelNativeTouches();
+    }
 }
 
 void AndroidBackend::processInputEvent(const lorieEvent &e)
 {
     switch (e.type) {
     case EVENT_TOUCH: {
-        if (!m_touchDevice) break;
+        if (!m_touchDevice || !m_touchDevice->isEnabled()) break;
 
         const auto &touch = e.touch;
         const QPointF pos(touch.x, touch.y);
+        const auto time = currentInputTime();
+        if (inputDebugEnabled()) {
+            std::fprintf(stderr, "android-input: touch type=%u id=%u x=%u y=%u time_us=%lld\n",
+                         static_cast<unsigned>(touch.type), static_cast<unsigned>(touch.id),
+                         static_cast<unsigned>(touch.x), static_cast<unsigned>(touch.y),
+                         static_cast<long long>(time.count()));
+            std::fflush(stderr);
+        }
 
+        // The display app sends X11 XInput2 touch types: 18 TouchBegin, 19 TouchUpdate, 20 TouchEnd.
+        // (0/1/2 were never sent, so every touch used to be dropped.) It also sends a TouchEnd for
+        // every one of its ten slots that is not pressed on each move, so only end a touch that began,
+        // and start one that was not yet down when its first update arrives.
+        const int touchId = touch.id;
         switch (touch.type) {
-        case 0: // Down
-            Q_EMIT m_touchDevice->touchDown(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+        case 18: // TouchBegin
+        case 0:
+            m_activeTouches.insert(touchId);
+            Q_EMIT m_touchDevice->touchDown(touchId, pos, time, m_touchDevice);
             break;
-        case 1: // Up
-            Q_EMIT m_touchDevice->touchUp(touch.id, std::chrono::milliseconds(0), m_touchDevice);
+        case 19: // TouchUpdate
+        case 2:
+            if (!m_activeTouches.contains(touchId)) {
+                m_activeTouches.insert(touchId);
+                Q_EMIT m_touchDevice->touchDown(touchId, pos, time, m_touchDevice);
+            } else {
+                Q_EMIT m_touchDevice->touchMotion(touchId, pos, time, m_touchDevice);
+            }
             break;
-        case 2: // Motion
-            Q_EMIT m_touchDevice->touchMotion(touch.id, pos, std::chrono::milliseconds(0), m_touchDevice);
+        case 20: // TouchEnd
+        case 1:
+            if (!m_activeTouches.remove(touchId)) {
+                return;
+            }
+            Q_EMIT m_touchDevice->touchUp(touchId, time, m_touchDevice);
             break;
+        default:
+            return;
         }
         Q_EMIT m_touchDevice->touchFrame(m_touchDevice);
         break;
@@ -479,11 +552,42 @@ void AndroidBackend::processInputEvent(const lorieEvent &e)
         const auto &mouse = e.mouse;
         const QPointF pos(mouse.x, mouse.y);
         const auto time = currentInputTime();
+        if (inputDebugEnabled()) {
+            std::fprintf(stderr, "android-input: mouse detail=%u x=%g y=%g down=%u relative=%u\n",
+                         static_cast<unsigned>(mouse.detail), static_cast<double>(mouse.x),
+                         static_cast<double>(mouse.y), static_cast<unsigned>(mouse.down),
+                         static_cast<unsigned>(mouse.relative));
+            std::fflush(stderr);
+        }
 
-        if (mouse.relative) {
+        // detail 4 is the wheel: x/y are scroll deltas in 1/120 notch units (positive = down/right),
+        // not a position. Treating them as motion pushed the pointer around instead of scrolling.
+        if (mouse.detail == 4) {
+            const struct {
+                PointerAxis axis;
+                float v120;
+            } axes[] = {{PointerAxis::Horizontal, mouse.x}, {PointerAxis::Vertical, mouse.y}};
+            bool any = false;
+            for (const auto &a : axes) {
+                if (a.v120 == 0.0f) {
+                    continue;
+                }
+                Q_EMIT m_pointerDevice->pointerAxisChanged(a.axis, a.v120 / 120.0 * 15.0,
+                                                           qRound(a.v120), PointerAxisSource::Wheel,
+                                                           false, time, m_pointerDevice);
+                any = true;
+            }
+            if (any) {
+                Q_EMIT m_pointerDevice->pointerFrame(m_pointerDevice);
+            }
+            break;
+        }
+
+        // Button events (detail 1-3) do not carry a position either: their x/y are not a location.
+        if (mouse.detail == 0 && mouse.relative) {
             QPointF delta(mouse.x, mouse.y);
             Q_EMIT m_pointerDevice->pointerMotion(delta, delta, time, m_pointerDevice);
-        } else {
+        } else if (mouse.detail == 0) {
             Q_EMIT m_pointerDevice->pointerMotionAbsolute(pos, time, m_pointerDevice);
         }
 
@@ -574,6 +678,9 @@ bool AndroidInputDevice::isEnabled() const
 
 void AndroidInputDevice::setEnabled(bool enabled)
 {
+    if (!enabled && m_type == Type::Touch) {
+        m_backend->cancelNativeTouches();
+    }
     m_enabled = enabled;
 }
 
