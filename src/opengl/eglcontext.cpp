@@ -34,9 +34,11 @@ std::shared_ptr<EglContext> EglContext::create(EglDisplay *display, EGLConfig co
 {
     auto handle = createContext(display, config, sharedContext ? sharedContext->handle() : EGL_NO_CONTEXT);
     if (!handle) {
+        qCCritical(KWIN_OPENGL) << "EGL context creation failed:" << getEglErrorString();
         return nullptr;
     }
     if (!eglMakeCurrent(display->handle(), EGL_NO_SURFACE, EGL_NO_SURFACE, handle)) {
+        qCCritical(KWIN_OPENGL) << "Initial EGL make-current failed:" << getEglErrorString();
         eglDestroyContext(display->handle(), handle);
         return nullptr;
     }
@@ -491,6 +493,20 @@ GLPlatform *EglContext::glPlatform() const
     return m_glPlatform.get();
 }
 
+bool EglContext::supportsBgraReadback() const
+{
+    return !m_isOpenglES || hasOpenglExtension(QByteArrayLiteral("GL_EXT_read_format_bgra"));
+}
+
+bool EglContext::supportsRgbaReadbackFallback() const
+{
+    // Only the Android System GLES backend has been audited for this fallback.
+    // DRM's CPU import still requires native BGRA readback.
+    return m_isOpenglES && hasVersion(Version(3, 0))
+        && qgetenv("KWIN_ANDROID_GL_MODE") == "system"
+        && m_display->hasExtension(QByteArrayLiteral("EGL_ANDROID_image_native_buffer"));
+}
+
 bool EglContext::checkSupported() const
 {
     const bool supportsGLSL = m_isOpenglES || (hasOpenglExtension("GL_ARB_shader_objects") && hasOpenglExtension("GL_ARB_fragment_shader") && hasOpenglExtension("GL_ARB_vertex_shader"));
@@ -498,14 +514,24 @@ bool EglContext::checkSupported() const
     const bool supports3DTextures = !m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension("GL_OES_texture_3D");
     const bool supportsFBOs = m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension("GL_ARB_framebuffer_object") || hasOpenglExtension(QByteArrayLiteral("GL_EXT_framebuffer_object"));
     const bool supportsUnpack = !m_isOpenglES || hasVersion(Version(3, 0)) || hasOpenglExtension(QByteArrayLiteral("GL_EXT_unpack_subimage"));
-    const bool supportsBGRADownload = !m_isOpenglES || hasOpenglExtension(QByteArrayLiteral("GL_EXT_read_format_bgra"));
+    const bool supportsBGRADownload = supportsBgraReadback() || supportsRgbaReadbackFallback();
 
     if (!supportsGLSL || !supportsNonPowerOfTwoTextures || !supports3DTextures || !supportsFBOs || !supportsUnpack || !supportsBGRADownload) {
+        qCCritical(KWIN_OPENGL) << "Required OpenGL capabilities unavailable:"
+            << "GLSL" << supportsGLSL << "NPOT" << supportsNonPowerOfTwoTextures
+            << "3D textures" << supports3DTextures << "FBO" << supportsFBOs
+            << "unpack" << supportsUnpack << "BGRA or Android RGBA readback" << supportsBGRADownload;
         return false;
     }
     // some old hardware only supports very limited shaders. To prevent the shaders KWin uses later on from not working,
     // test a reasonably complex one here and bail out early if it doesn't work
-    return m_shaderManager->shader(ShaderTrait::MapTexture | ShaderTrait::TransformColorspace | ShaderTrait::AdjustSaturation | ShaderTrait::Modulate);
+    const bool shaderSupported = m_shaderManager->shader(ShaderTrait::MapTexture | ShaderTrait::TransformColorspace | ShaderTrait::AdjustSaturation | ShaderTrait::Modulate);
+    if (!shaderSupported) {
+        qCCritical(KWIN_OPENGL) << "Required compositing shader failed validation";
+    } else if (!supportsBgraReadback()) {
+        qCInfo(KWIN_OPENGL) << "Android System GLES uses RGBA readback with BGRA image conversion";
+    }
+    return shaderSupported;
 }
 
 QSet<QByteArray> EglContext::openglExtensions() const

@@ -47,3 +47,17 @@ target_link_libraries(qt-client-renderer-probe PRIVATE Qt6::Core Qt6::Gui)
 
 set_target_properties(qt-client-renderer-probe PROPERTIES OUTPUT_NAME kwin-qt-client-renderer-probe)
 install(TARGETS qt-client-renderer-probe RUNTIME DESTINATION bin)
+
+# Explicit validation target; never installed or included in release packages.
+add_executable(kwin-android-readback-test EXCLUDE_FROM_ALL egl-readback-test.cpp)
+target_compile_features(kwin-android-readback-test PRIVATE cxx_std_23)
+target_include_directories(kwin-android-readback-test PRIVATE
+    "${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}/src")
+target_link_libraries(kwin-android-readback-test PRIVATE kwin Qt6::Gui)
+qt_add_resources(kwin-android-readback-test readback_blur_shaders
+    PREFIX "/effects/blur"
+    BASE "${CMAKE_SOURCE_DIR}/src/plugins/blur"
+    FILES
+        "${CMAKE_SOURCE_DIR}/src/plugins/blur/shaders/vertex.vert"
+        "${CMAKE_SOURCE_DIR}/src/plugins/blur/shaders/downsample.frag"
+        "${CMAKE_SOURCE_DIR}/src/plugins/blur/shaders/upsample.frag")

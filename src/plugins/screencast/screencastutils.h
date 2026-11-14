@@ -7,6 +7,7 @@
 #pragma once
 
 #include "opengl/glplatform.h"
+#include "opengl/glreadback.h"
 #include "opengl/gltexture.h"
 #include "opengl/glutils.h"
 
@@ -61,7 +62,13 @@ static void doGrabTexture(GLTexture *texture, QImage *target)
     if (context->isOpenGLES() || context->glPlatform()->driver() == Driver_NVidia) {
         GLFramebuffer fbo(texture);
         GLFramebuffer::pushFramebuffer(&fbo);
-        context->glReadnPixels(0, 0, size.width(), size.height(), closestGLType(target->format()), GL_UNSIGNED_BYTE, target->sizeInBytes(), target->bits());
+        if (closestGLType(target->format()) == GL_BGRA && !context->supportsBgraReadback()) {
+            if (!readRgbaPixelsToBgraImage(context, target)) {
+                qWarning() << "RGBA screencast readback conversion failed";
+            }
+        } else {
+            context->glReadnPixels(0, 0, size.width(), size.height(), closestGLType(target->format()), GL_UNSIGNED_BYTE, target->sizeInBytes(), target->bits());
+        }
         GLFramebuffer::popFramebuffer();
     } else {
         context->glGetnTexImage(texture->target(), 0, closestGLType(target->format()), GL_UNSIGNED_BYTE, target->sizeInBytes(), target->bits());

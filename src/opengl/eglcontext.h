@@ -73,6 +73,8 @@ public:
     bool haveBufferStorage() const;
     bool haveSyncFences() const;
     bool supportsPackInvert() const;
+    bool supportsBgraReadback() const;
+    bool supportsRgbaReadbackFallback() const;
     ShaderManager *shaderManager() const;
     GLVertexBuffer *streamingVbo() const;
     IndexBuffer *indexBuffer() const;

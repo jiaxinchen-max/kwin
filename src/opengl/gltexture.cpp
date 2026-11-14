@@ -219,7 +219,13 @@ void GLTexture::bind()
 
     glBindTexture(d->m_target, d->m_texture);
 
-    if (d->m_filterChanged) {
+    // The Android Emulator GLES translator can sample the previously bound
+    // texture when its cached filters are reused. Reapply the current filters
+    // on this backend; the red/blue/red render regression covers the failure.
+    const auto context = EglContext::currentContext();
+    const bool refreshEmulatorFilters = context->supportsRgbaReadbackFallback()
+        && context->renderer().startsWith("Android Emulator");
+    if (d->m_filterChanged || refreshEmulatorFilters) {
         GLenum minFilter = GL_NEAREST;
         GLenum magFilter = GL_NEAREST;
 
