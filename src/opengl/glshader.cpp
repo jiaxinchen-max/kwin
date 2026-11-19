@@ -94,6 +94,12 @@ std::optional<QByteArray> GLShader::preprocess(const QByteArray &src, GLenum sha
             }
         }
         if (context->isOpenGLES()) {
+            // Derivatives are core in GLES 3. GLES 2 needs the extension,
+            // which must precede precision declarations on strict drivers.
+            if (!coreShader && shaderType == GL_FRAGMENT_SHADER
+                && context->hasOpenglExtension(QByteArrayLiteral("GL_OES_standard_derivatives"))) {
+                ret.append("#extension GL_OES_standard_derivatives : enable\n");
+            }
             ret.append("precision highp float;\n");
             ret.append("precision highp sampler2D;\n");
             ret.append("precision highp sampler3D;\n");
